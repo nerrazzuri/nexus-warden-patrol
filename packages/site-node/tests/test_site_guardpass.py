@@ -188,3 +188,37 @@ def test_外审1_1_第2轮_4_撤销跟建缓存撞上_撤销以后认不出_不�
     assert faces.match(_脸(3)) is None, "撤销以后旧缓存不许盖回来"
     assert gp.seen("A", "gina", how="face", score=0.9) == 0, "认到一半撤销了:不记"
     assert not [p for p in gp.list(since=0, until=now[0] + 1)["passes"] if p["account"] == "gina"]
+
+
+def test_外审1_1_第3轮_1_登记到一半撤销了_这次登记不写回去(记):
+    import threading
+
+    from nexwar_site.faces import FaceError
+    gp, desk, now, _ = 记
+    faces = gp.faces
+    in_feat, go = threading.Event(), threading.Event()
+    real = faces.engine.features
+
+    def slow(jpeg):
+        in_feat.set()
+        go.wait(5)
+        return real(jpeg)
+    faces.engine.features = slow
+    err: list = []
+
+    def add():
+        try:
+            faces.add_photo("gina", consent=True, jpeg_b64=_照("face:3"))
+        except FaceError as exc:
+            err.append(str(exc))
+    t1 = threading.Thread(target=add)
+    t1.start()
+    assert in_feat.wait(5)
+    assert faces.remove("gina")
+    go.set()
+    t1.join(5)
+    assert err and "撤销了同意" in err[0]
+    assert not faces.consented("gina") and faces.match(_脸(3)) is None
+    faces.engine.features = real
+    faces.add_photo("gina", consent=True, jpeg_b64=_照("face:3"))   # 撤销以后重新同意:照常登记
+    assert faces.match(_脸(3))[0] == "gina"

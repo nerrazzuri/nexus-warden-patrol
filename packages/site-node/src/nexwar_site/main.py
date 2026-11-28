@@ -1461,7 +1461,10 @@ class Server:
         """1.1-3 报警核实有了结论:告警那头关 P2 / 报 P1;「没人」的,这一趟到场开的驱离收掉
         (外审 1.1 第 2 轮 #2:不然照旧升档、开警笛)。"""
         self.alert_sources.on_verdict(row)
-        if row.get("verdict") == "clear" and getattr(self, "deterrence", None) is not None:
+        task = str(row.get("task_id") or "")
+        # 第 3 轮 #4:同一趟上还有别的报警没下结论(或看见人、真入侵)就先不收
+        if row.get("verdict") == "clear" and getattr(self, "deterrence", None) is not None \
+                and task and self.incidents.task_settled(task, int(row.get("id") or 0)):
             self.deterrence.stand_down(str(row.get("robot_id") or ""),
                                        str(row.get("task_id") or ""),
                                        "报警核实:机器人到了现场,没看见人")

@@ -354,12 +354,99 @@ def test_外审1_1_第2轮_3_合并的告警按记下的报警下结论_有人�
                       "(?, 'dev-door-1', ?, 'intrusion', 'Z1', ?, 'dispatched', 'A', "
                       "'inc-1', 1, '')",
                       (i, f"e{i}", t.clock() - 1000))
-    src.on_incident(base | {"id": 1})
-    src.on_incident(base | {"id": 2, "outcome": "merged"})
+    for i, r in ((1, base | {"id": 1}), (2, base | {"id": 2, "outcome": "merged"})):
+        key = src.on_incident(r)                       # 报警派遣那头把告警号记在报警上
+        with t.db.tx() as c:
+            c.execute("UPDATE incidents SET verify_alert=? WHERE id=?", (key, i))
     [v] = _开着(t, "intrusion_verifying")
-    assert v.context["incidents"] == [1, 2]
+    assert [r["id"] for r in t.db.query("SELECT id FROM incidents WHERE verify_alert=? "
+                                        "ORDER BY id", (v.key,))] == [1, 2]
     with t.db.tx() as c:
         c.execute("UPDATE incidents SET verdict='person' WHERE id=1")
     src.on_verdict(base | {"id": 2, "verdict": "clear"})
     got = t.alerts.book.get(v.key)
     assert got.resolved_ms is not None and got.verdict != "false_alarm", "有一条看见人:不算误报"
+
+
+async def _到了(t):
+    await t.run(12)
+    _门磁(t)
+    r = await _触发(t)
+    await t.run(200)
+    assert t.desk.list()[0]["result"] == "done"
+    _能看(t)
+    return r
+
+
+async def test_外审1_1_第3轮_2_被派走过_做完了也不算回到现场_当场没核实成(核):
+    import dataclasses
+    from types import SimpleNamespace
+    t = 核
+    await _到了(t)
+    c = t.desk.dispatcher.clients["A"]
+    c.status = dataclasses.replace(c.status, task=SimpleNamespace(
+        task_id="adhoc-x", state=SimpleNamespace(value="done")))      # 被派去别处、已经做完
+    assert t.desk.verify_tick() == 1
+    assert t.desk.list()[0]["verdict"] == "unverified"
+    [p1] = _开着(t, "intrusion_unanswered")
+    assert "被派去做别的" in p1.title
+
+
+async def test_外审1_1_第3轮_3_站点重启_从启动起再看满(核):
+    t = 核
+    await _到了(t)
+    t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
+    t.desk._born = t.clock()                             # 像刚重启
+    assert t.desk.verify_tick() == 0, "重启前看的那段不算"
+    t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
+    assert t.desk.verify_tick() == 1
+    assert t.desk.list()[0]["verdict"] == "clear"
+
+
+async def test_外审1_1_第3轮_6_驱离里看见人报的也算看见人(核):
+    t = 核
+    await _到了(t)
+    t.alerts.raise_alert(kind="intrusion_person", robot="A", title="拦截点看到 1 个人")
+    t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
+    assert t.desk.verify_tick() == 1
+    assert t.desk.list()[0]["verdict"] == "person"
+
+
+def test_外审1_1_第3轮_4_同一趟还有没下结论的_不收驱离(核):
+    from types import SimpleNamespace
+
+    from nexwar_site.main import Server
+    t = 核
+    with t.db.tx() as c:
+        for i, (verify, verdict) in enumerate([(1, "clear"), (1, ""), (0, "")], start=1):
+            c.execute("INSERT INTO incidents (id, source, event_id, type, zone, received_at, "
+                      "outcome, robot_id, task_id, verify, verdict) VALUES "
+                      "(?, 'dev-door-1', ?, 'intrusion', 'Z1', 1, 'dispatched', 'A', ?, ?, ?)",
+                      (i, f"e{i}", "inc-1" if i < 3 else "inc-2", verify, verdict))
+    assert not t.desk.task_settled("inc-1", 1), "第 2 条还在核实"
+    assert t.desk.task_settled("inc-2", 99) is False, "不用核实的真入侵在这一趟上"
+    downs: list = []
+    me = SimpleNamespace(alert_sources=SimpleNamespace(on_verdict=lambda r: None),
+                         incidents=t.desk,
+                         deterrence=SimpleNamespace(stand_down=lambda *a: downs.append(a)))
+    Server._on_verdict(me, {"id": 1, "verdict": "clear", "robot_id": "A", "task_id": "inc-1"})
+    assert downs == []
+    with t.db.tx() as c:
+        c.execute("UPDATE incidents SET verdict='clear' WHERE id=2")
+    Server._on_verdict(me, {"id": 2, "verdict": "clear", "robot_id": "A", "task_id": "inc-1"})
+    assert downs and downs[0][:2] == ("A", "inc-1")
+
+
+async def test_外审1_1_第3轮_5_告警号记在报警上_不限条数(核):
+    t = 核
+    await t.run(12)
+    _门磁(t)
+    t.desk.merge_window_ms = 10 ** 9
+    await _触发(t)
+    for _ in range(60):
+        t.clock.advance(3)                          # 报警编号按时刻起;一分钟别超过事件源上限
+        await _触发(t)
+    [v] = _开着(t, "intrusion_verifying")
+    n = t.db.query("SELECT COUNT(*) AS n FROM incidents WHERE verify_alert=?", (v.key,))[0]["n"]
+    assert n == 61
+    assert t.src._members(v.key)[0] == t.db.query("SELECT MIN(id) AS m FROM incidents")[0]["m"]

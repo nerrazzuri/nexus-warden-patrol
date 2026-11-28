@@ -26,6 +26,11 @@ TALK_ID = re.compile(r"^talk:([0-9a-f]{16})$")
 #: 站点给的录音最多多大(字节)。
 MAX_BYTES = 2 * 1024 * 1024
 KEEP = 20
+#: 外审 1.1 第 2 轮后第 3 轮 #7:转出来的最多放多久(按住说话最多 30 秒,前后各垫 0.3 秒)、
+#: 一段最大多少字节(48 kHz 双声道 s16),缓存一共最多多少字节。压得很小的长录音不许撑满磁盘
+MAX_PLAY_S = 31.0
+MAX_OUT_BYTES = int(MAX_PLAY_S * 48000 * 2 * 2) + 4096
+KEEP_BYTES = 64 * 1024 * 1024
 TIMEOUT_S = 20.0
 CONVERT_TIMEOUT_S = 20.0
 
@@ -78,26 +83,39 @@ class TalkLink:
             return out
         raw = await asyncio.to_thread(self._get, tid)
         src = self.work / f"talk-{tid}.src"
+        part = self.work / f"talk-{tid}.part.wav"      # 转成了才改名:半截的不当成放得了的
         src.write_bytes(raw)
+        ok = False
         try:
-            proc = await asyncio.create_subprocess_exec(
-                self.ffmpeg, "-nostdin", "-y", "-loglevel", "error", "-i", str(src),
-                "-af", "adelay=300|300,apad=pad_dur=0.3", "-ar", "48000", "-ac", "2",
-                "-sample_fmt", "s16", str(out),
-                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
-        except OSError as exc:
-            raise TalkError(f"ffmpeg 起不来:{exc}") from exc
-        try:
-            _, err = await asyncio.wait_for(proc.communicate(), CONVERT_TIMEOUT_S)
-        except asyncio.TimeoutError as exc:
-            with contextlib.suppress(ProcessLookupError):
-                proc.kill()
-            raise TalkError("录音转码超时") from exc
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    self.ffmpeg, "-nostdin", "-y", "-loglevel", "error", "-i", str(src),
+                    "-af", "adelay=300|300,apad=pad_dur=0.3", "-ar", "48000", "-ac", "2",
+                    "-sample_fmt", "s16", "-t", f"{MAX_PLAY_S:g}", "-fs", str(MAX_OUT_BYTES),
+                    str(part),
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+            except OSError as exc:
+                raise TalkError(f"ffmpeg 起不来:{exc}") from exc
+            try:
+                _, err = await asyncio.wait_for(proc.communicate(), CONVERT_TIMEOUT_S)
+            except asyncio.TimeoutError as exc:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                with contextlib.suppress(Exception):
+                    await proc.wait()
+                raise TalkError("录音转码超时") from exc
+            if proc.returncode != 0 or not part.is_file():
+                raise TalkError("录音转码失败:" + (err or b"").decode("utf-8", "replace")[:150])
+            if part.stat().st_size > MAX_OUT_BYTES:
+                raise TalkError("录音转出来太大")
+            part.replace(out)
+            ok = True
         finally:
             with contextlib.suppress(OSError):
                 src.unlink()
-        if proc.returncode != 0 or not out.is_file():
-            raise TalkError("录音转码失败:" + (err or b"").decode("utf-8", "replace")[:150])
+            if not ok:
+                with contextlib.suppress(OSError):
+                    part.unlink()
         self._prune()
         return out
 
@@ -112,6 +130,9 @@ class TalkLink:
     def _prune(self) -> None:
         files = sorted(self.work.glob("talk-*.wav"), key=lambda f: f.stat().st_mtime,
                        reverse=True)
-        for f in files[KEEP:]:
+        total = 0
+        for i, f in enumerate(files):
             with contextlib.suppress(OSError):
-                f.unlink()
+                total += f.stat().st_size
+                if i >= KEEP or (i > 0 and total > KEEP_BYTES):
+                    f.unlink()

@@ -191,6 +191,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     told_ms      INTEGER DEFAULT 0,
     verify       INTEGER NOT NULL DEFAULT 0,
     verdict      TEXT NOT NULL DEFAULT '',
+    verify_alert TEXT NOT NULL DEFAULT '',
     result_ms    INTEGER,
     UNIQUE (source, event_id)
 );
@@ -1068,6 +1069,7 @@ _ADDED_COLUMNS = (
     ("incidents", "verify", "INTEGER NOT NULL DEFAULT 0"),
     ("incidents", "verdict", "TEXT NOT NULL DEFAULT ''"),
     ("incidents", "result_ms", "INTEGER"),
+    ("incidents", "verify_alert", "TEXT NOT NULL DEFAULT ''"),        # 1.1-3 外审第 3 轮 #5
     # 1.1-3:外部设备「先核实再报警」、接入方式(签名回调 / 触发网址 / 报警主机 / IO 模块)、
     # 触发口令哈希
     ("ext_devices", "verify_first", "INTEGER NOT NULL DEFAULT 0"),

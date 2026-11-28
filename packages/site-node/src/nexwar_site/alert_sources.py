@@ -1168,7 +1168,7 @@ class SiteAlertSources:
                 self._sched_entries.pop(a.key, None)
                 self.desk.resolve(a.key, who="site:schedule", note=note)
 
-    def on_incident(self, row: dict) -> None:
+    def on_incident(self, row: dict) -> str | None:
         """一条入侵有了去向(W16):派出去了、并进已出动的,说「有入侵、谁去了」(记在那只狗名下);没狗、
         防区没映射、派失败,说「有入侵、没狗去」(记在站点名下)。都是 P1:要人动身。同一只狗(或站点)
         同一个 kind 合成一条,标题列上合进来的每个防区(同排程)。"""
@@ -1206,15 +1206,13 @@ class SiteAlertSources:
             ctx["intercept"] = row["intercept_pose"]
         if kind in ("intrusion", "intrusion_verifying") and row.get("task_id"):
             ctx["task_id"] = row["task_id"]                # 到了拍的照片在这一趟的记录里
-        if kind == "intrusion_verifying" and row.get("id") is not None:
-            # 外审 1.1 第 2 轮 #3:这条告警合了哪几条报警,明着记(下结论按这个集合,不按时间猜)
-            had = prev.context.get("incidents", []) if prev is not None else []
-            ctx["incidents"] = [*[i for i in had if i != row["id"]], row["id"]][-50:]
         a = self.desk.raise_alert(kind=kind, robot=robot, title=title[:200], detail=detail[:300],
                                   context=ctx)
         self._incident_zones[a.key] = zones
         while len(self._incident_zones) > 200:
             self._incident_zones.pop(next(iter(self._incident_zones)))
+        # 外审 1.1 第 2、3 轮 #3 #5:「去核实」合进了哪条告警,报警派遣那头记在这条报警上
+        return a.key if kind == "intrusion_verifying" else None
 
     def on_verdict(self, row: dict) -> None:
         """1.1-3:「去核实」那条有了结论 —— 看见人了(P1 已经由「机器人看见人」报了)、
@@ -1238,7 +1236,7 @@ class SiteAlertSources:
         for a in self.desk.book.open():
             if a.kind != "intrusion_verifying" or a.robot != robot:
                 continue
-            members = [int(i) for i in a.context.get("incidents", []) if isinstance(i, int)]
+            members = self._members(a.key)
             if members and this not in members:
                 continue                                 # 不是这条告警合进来的报警
             # 外审 1.1 #9:这台机器人的「去核实」可能合了好几条报警(同一机器人同一种并成一条)。
@@ -1250,6 +1248,14 @@ class SiteAlertSources:
             clear = verdict == "clear" and not bad
             self.desk.resolve(a.key, who="site:verify",
                               verdict="false_alarm" if clear else "", note=note)
+
+    def _members(self, key: str) -> list[int]:
+        """合进这条「去核实」告警的报警(老告警没记的回空)。"""
+        db = getattr(self.desk, "db", None)
+        if db is None:
+            return []
+        return [int(r["id"]) for r in db.query("SELECT id FROM incidents WHERE verify_alert=?",
+                                                (key,))]
 
     def _verify_group(self, robot: str, since: int, this: int,
                       members: list[int] | None = None) -> tuple[int, int]:

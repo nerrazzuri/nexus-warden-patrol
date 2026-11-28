@@ -107,6 +107,8 @@ class FaceBook:
         self._cache: dict[str, list[list[float]]] | None = None
         #: 外审 1.1 第 2 轮 #4:建缓存和撤销 / 加照片排队(不然撤销清掉的缓存会被正在建的旧缓存盖回去)
         self._lock = threading.Lock()
+        #: 第 3 轮 #1:每个人撤销过几次。登记开始时记下,写库前再比:中间撤销过的那次登记不写
+        self._revoked: dict[str, int] = {}
 
     # ---------------------------------------------------------------- 存取
 
@@ -149,18 +151,23 @@ class FaceBook:
         except (binascii.Error, ValueError) as exc:
             raise FaceError("照片不是 base64") from exc
         box = self._box()
+        with self._lock:
+            gen = self._revoked.get(account, 0)
         old = self._feats(account)
         if len(old) >= MAX_PHOTOS:
             raise FaceError(f"已经登记了 {MAX_PHOTOS} 张:要重拍先删掉")
         feat = self.engine.features(jpeg)            # 照片只在这里用,不落盘
         feats = [*old, feat]
         now = self._now()
-        with self.db.tx() as c:
-            c.execute("INSERT INTO face_book(account, consent_ms, feats, n, updated_ms) "
-                      "VALUES (?,?,?,?,?) ON CONFLICT(account) DO UPDATE SET "
-                      "feats=excluded.feats, n=excluded.n, updated_ms=excluded.updated_ms",
-                      (account, now, box.seal(json.dumps(feats)), len(feats), now))
+        sealed = box.seal(json.dumps(feats))
         with self._lock:
+            if self._revoked.get(account, 0) != gen:
+                raise FaceError("登记的时候撤销了同意:这张没存,要登记重新来")
+            with self.db.tx() as c:
+                c.execute("INSERT INTO face_book(account, consent_ms, feats, n, updated_ms) "
+                          "VALUES (?,?,?,?,?) ON CONFLICT(account) DO UPDATE SET "
+                          "feats=excluded.feats, n=excluded.n, updated_ms=excluded.updated_ms",
+                          (account, now, sealed, len(feats), now))
             self._cache = None
         return self.view(account)
 
@@ -169,6 +176,7 @@ class FaceBook:
         with self._lock:
             with self.db.tx() as c:
                 n = c.execute("DELETE FROM face_book WHERE account=?", (account,)).rowcount
+            self._revoked[account] = self._revoked.get(account, 0) + 1
             self._cache = None
         return bool(n)
 

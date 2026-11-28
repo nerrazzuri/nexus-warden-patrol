@@ -34,6 +34,7 @@ from typing import Any
 from nexwar_contract.charging import LOW_PCT
 from nexwar_contract.dispatch import DispatchTimeout
 from nexwar_contract.messages import Event, MapPose
+from nexwar_contract.standoff import TASK_PREFIX as STANDOFF_PREFIX
 from nexwar_site import energy
 from nexwar_site.ca import SAFE_ID
 from nexwar_site.db import SiteDB
@@ -63,6 +64,8 @@ RATE_PER_MIN = 30
 #: 狗到了拦截点拍一张,用哪个相机(W17:现场照片挂在告警上)。狗没报能拍就不拍。
 ARRIVAL_CAMERA = "front"
 #: 1.1-3:机器人到了现场再看这么久没看见人,才算「核实无人」(毫秒)。
+#: 核实时机器人离开过现场(跑过别的任务)。
+AWAY = "机器人被派去做别的了"
 VERIFY_HOLD_MS = 30_000
 #: 1.1-3:报警以后这么久机器人还没到,算没核实成(毫秒)。
 VERIFY_TIMEOUT_MS = 10 * 60_000
@@ -119,6 +122,8 @@ class IncidentDesk:
         self.reach: Any = None
         #: 外审 1.1 第 2 轮 #1:核实观察中断过(离线、人员检测不可用、被派走)的报警 → 重新能看的时刻
         self._watch_from: dict[int, int | None] = {}
+        #: 第 3 轮 #3:这次站点启动的时刻。重启前的观察不算数(断没断过没记下来):从启动起再看满一段
+        self._born = now_ms()
         #: 每个事件源最近一分钟收过的时刻。接口是多线程的:「清掉一分钟前的、判断、
         #: 记一笔」得在一把锁里
         #: 一次做完(W16 外审:不加锁 40 个并发请求全放行)。
@@ -665,12 +670,15 @@ class IncidentDesk:
                 row = row | {"intercept_pose": {k: point[k] for k in (
                     "name", "map_id", "map_version", "x", "y", "yaw")}}
             try:
-                self.on_outcome(row)
+                key = self.on_outcome(row)
             except Exception:
                 log.exception("入侵 %s 的告警报不出去:下一拍再报", rid)
                 return False
             with self.db.tx() as c:
                 c.execute("UPDATE incidents SET told_ms=? WHERE id=?", (self._now(), rid))
+                if isinstance(key, str) and key:
+                    # 外审 1.1 第 3 轮 #5:这条报警合进了哪条「去核实」告警(按这个下结论,不限条数)
+                    c.execute("UPDATE incidents SET verify_alert=? WHERE id=?", (key, rid))
             return True
         finally:
             with self._tell_lock:
@@ -728,9 +736,16 @@ class IncidentDesk:
             rid = lead.get("robot_id")
             if not rid:
                 continue
+            # 第 3 轮 #6:驱离中看见人报的是 intrusion_person(还在排队的也算),会话也记了见过人
             seen = self.db.query(
-                "SELECT 1 FROM alerts WHERE robot=? AND kind='dog_sees_person' AND last_ms>=? "
-                "LIMIT 1", (rid, row["received_at"]))
+                "SELECT 1 FROM alerts WHERE robot=? AND kind IN ('dog_sees_person', "
+                "'intrusion_person') AND last_ms>=? LIMIT 1", (rid, row["received_at"])) \
+                or self.db.query(
+                    "SELECT 1 FROM pending_alerts WHERE robot=? AND kind='intrusion_person' "
+                    "AND created_ms>=? LIMIT 1", (rid, row["received_at"])) \
+                or self.db.query(
+                    "SELECT 1 FROM deter_sessions WHERE robot_id=? AND task_id=? AND person_seen=1 "
+                    "LIMIT 1", (rid, lead.get("task_id") or ""))
             result, done_ms = lead.get("result"), lead.get("result_ms")
             why = ""
             if seen:
@@ -739,7 +754,10 @@ class IncidentDesk:
                 # 外审 1.1 #8:并进来的报警,机器人在它之前就到了 —— 从这条报警起再看满一段才算没人。
                 # 第 2 轮 #1:这一段里机器人要一直在线、人员检测在看、没被派走;断过就从恢复起重新数
                 why = self._cant_watch(rid, lead.get("task_id"))
-                if why:
+                if why == AWAY:
+                    # 第 3 轮 #2:离开过现场就回不来了(做完别的也不在原地):当场算没核实成
+                    verdict = "unverified"
+                elif why:
                     self._watch_from[row["id"]] = None
                     if now - row["received_at"] < VERIFY_TIMEOUT_MS:
                         continue
@@ -748,7 +766,8 @@ class IncidentDesk:
                     if row["id"] in self._watch_from and self._watch_from[row["id"]] is None:
                         self._watch_from[row["id"]] = now
                     since = self._watch_from.get(row["id"]) or 0
-                    if now - max(done_ms, row["received_at"], since) < VERIFY_HOLD_MS:
+                    if now - max(done_ms, row["received_at"], since, self._born) \
+                            < VERIFY_HOLD_MS:
                         continue
                     verdict = "clear"
             elif result in ("failed", "aborted", "preempted") \
@@ -781,6 +800,17 @@ class IncidentDesk:
         if not isinstance(p, dict) or p.get("state") != "ok":
             return "机器人的人员检测不可用"
         t = c.status.task
-        if t is not None and t.task_id != task_id and t.state.value in ("pending", "running"):
-            return "机器人被派去做别的了"
+        if t is not None and t.task_id not in (task_id, f"{STANDOFF_PREFIX}{task_id}"):
+            return AWAY                              # 第 3 轮 #2:跑过别的任务(没做完、做完了都算)
         return ""
+
+    def task_settled(self, task_id: str, this: int) -> bool:
+        """这一趟(``task_id``)上,除了 ``this``,别的报警都下了「没人」/「没核实成」的结论
+        (没有还在核实的、看见人的、不用核实的真入侵)。外审 1.1 第 3 轮 #4:都没事了驱离才收、
+        机器人才回去。"""
+        rows = self.db.query(
+            "SELECT i.verify, i.verdict FROM incidents i "
+            "LEFT JOIN incidents l ON l.id=i.merged_into "
+            "WHERE i.id<>? AND i.outcome IN ('dispatched', 'merged') "
+            "AND COALESCE(l.task_id, i.task_id)=?", (this, task_id))
+        return all(r["verify"] and r["verdict"] in ("clear", "unverified") for r in rows)
