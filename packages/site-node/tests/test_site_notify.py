@@ -610,3 +610,30 @@ def test_外审1_1_第12轮全量_HTTP错误码_读正文时连接断了_照样�
     with pytest.raises(SendError, match="HTTP 503"):
         notify._post_json(f"http://127.0.0.1:{port}/hook", {"a": 1}, timeout=5)
     srv.close()
+
+
+def test_外审1_1_第13轮_2_查域名卡着_HTTP和邮件都到点就断_不拖住这一拍(monkeypatch):
+    import socket as _s
+    import time as _t
+    real = _s.getaddrinfo
+    gate = __import__("threading").Event()
+
+    def 慢查(host, *a, **kw):
+        if host == "slow.invalid":
+            gate.wait(5)
+        return real("127.0.0.1", *a, **kw)
+    monkeypatch.setattr(_s, "getaddrinfo", 慢查)
+    try:
+        t0 = _t.monotonic()
+        with pytest.raises(SendError, match="查域名"):
+            notify._post_json("http://slow.invalid:9/hook", {"a": 1}, timeout=5,
+                              deadline=_t.monotonic() + 0.3)
+        assert _t.monotonic() - t0 < 1.0, "HTTP:查域名也按截止时间"
+        t0 = _t.monotonic()
+        with pytest.raises(OSError, match="查域名"):
+            notify._SMTP("slow.invalid", 9, timeout=5, deadline=_t.monotonic() + 0.3)
+        assert _t.monotonic() - t0 < 1.0, "邮件:查域名也按截止时间"
+        assert notify._resolve("127.0.0.1", 9, _t.monotonic() + 1) == "127.0.0.1", "IP 不查"
+        assert notify._resolve("slow.invalid", 9, None) == "slow.invalid", "没截止时间照旧"
+    finally:
+        gate.set()

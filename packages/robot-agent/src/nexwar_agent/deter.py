@@ -259,12 +259,38 @@ class DeterDesk:
             if gen != self._speak_gen:
                 log.info("喇叭指令 %r 排到时已被后来的指令取代,不做", clip or "关")
                 return
-            if prep is not None and self._mono() > prep:
-                raise RuntimeError(f"准备超过 {PREP_S:g} 秒还没起播,不放了")
-            await self.hal.sound(clip, max_s)
+            if prep is None:
+                await self.hal.sound(clip, max_s)
+            else:
+                await self._sound_by(clip, max_s, prep)
             self._started_gen = gen
             if clip and self._sound is not None and self._sound_gen == gen:
                 self._sound = (self._sound[0], self._mono() + max_s)
+
+    async def _sound_by(self, clip: str, max_s: float, prep: float) -> None:
+        """外审 1.1 第 13 轮 #1:HAL 起播(等功放、起播放器、连竞品主控)也算进准备的截止时间 ——
+        到点还没起来就取消、再叫一次关喇叭清掉可能半起来的,抛错(后台回调报 failed、放开优先级)。
+        按单调钟(``monotonic``)每 0.1 秒看一次,跟优先级用的是同一个钟。"""
+        if self._mono() > prep:
+            raise RuntimeError(f"准备超过 {PREP_S:g} 秒还没起播,不放了")
+        t = asyncio.ensure_future(self.hal.sound(clip, max_s))
+        while not t.done():
+            try:
+                await asyncio.wait({t}, timeout=0.1)
+            except asyncio.CancelledError:
+                t.cancel()                           # 自己被取消:起播也一起取消
+                raise
+            if not t.done() and self._mono() > prep:
+                t.cancel()
+                await asyncio.wait({t})              # 等它真退出(不往外抛它的取消)
+                if not t.cancelled() and t.exception() is not None:
+                    log.info("准备超时取消起播时它出错了: %s", t.exception())
+                try:
+                    await self.hal.sound("", 0)
+                except Exception:                    # 关不掉也照样报没放成
+                    log.exception("准备超时后关喇叭没成")
+                raise RuntimeError(f"准备超过 {PREP_S:g} 秒还没起播,不放了")
+        t.result()
 
     async def _listen(self, cmd: Command, req: Any) -> None:
         """1.1-4 听回话:录 ``max_s`` 秒、传回站点;成没成都记一条 ``deter`` 事件。"""

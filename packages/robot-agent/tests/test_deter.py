@@ -681,8 +681,10 @@ async def test_真机1120_喊话慢_3秒内先回执_后台做完照常_做不�
     assert ev[-1][1]["on"] is True and desk.playing() is not None
     hal.fail = "竞品主控的播音程序没连上"
     gate.set()
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    for _ in range(50):                                   # 后台起播的结果传回来要几轮事件循环
+        await asyncio.sleep(0.01)
+        if ev[-1][1].get("ended"):
+            break
     assert ev[-1][1] == {"task_id": "deter-c", "output": "speaker", "on": False,
                          "ended": "failed", "reason": "竞品主控的播音程序没连上"}
     assert desk.playing() is None
@@ -924,11 +926,12 @@ async def test_外审1_1_第12轮_1_下载慢_优先级从起播时刻算_准备
     assert await job == ""
     clock[0] = 20.0
     gate.set()
-    for _ in range(20):
-        await asyncio.sleep(0)
-        if hal.clips:
+    for _ in range(50):                                   # 起播完成、优先级按起播时刻重算
+        await asyncio.sleep(0.01)
+        if desk._started_gen == desk._speak_gen:
             break
     assert hal.clips and hal.clips[-1].startswith("talk:")
+    assert desk.playing() == (60, 55.0)
     clock[0] = 39.0
     assert await desk.auto_sound("distance", priority=40, max_s=15, why="t") is False, \
         "起播才 19 秒:低优先级的自动话术不能截"
@@ -946,10 +949,43 @@ async def test_外审1_1_第12轮_1_下载慢_优先级从起播时刻算_准备
     assert await job == ""
     clock[0] = 100.0 + deter.PREP_S + 1
     gate.set()
-    for _ in range(20):
-        await asyncio.sleep(0)
+    for _ in range(50):
+        await asyncio.sleep(0.01)
         if any(d.get("ended") == "failed" for _, d in ev):
             break
     assert len(hal.clips) == n, "准备超时:不放"
     assert any(d.get("ended") == "failed" and "准备" in d.get("reason", "") for _, d in ev)
     assert desk.playing() is None, "放开优先级"
+
+
+async def test_外审1_1_第13轮_1_HAL起播卡着_也算准备截止(monkeypatch, tmp_path):
+    """到点取消起播、关一次喇叭、报 failed、放开优先级;取消掉的不会晚起播。"""
+    from nexwar_agent import deter
+    monkeypatch.setattr(deter, "SPEAK_ACK_S", 0.001)
+    clock = [0.0]
+    stuck = asyncio.Event()
+
+    class 慢起播(_有回调的喇叭):
+        async def sound(self, clip, max_s):
+            if clip:
+                await stuck.wait()                         # 等功放、连主控……一直起不来
+            self.clips.append(clip)
+    hal, ev = 慢起播(), []
+    desk = deter.DeterDesk(hal, emit=lambda k, d: ev.append((k, d)), monotonic=lambda: clock[0])
+    desk.talk = _假链路(tmp_path)
+    c = _喇叭命令("talk:0123456789abcdef", 60, "a")
+    c.payload["max_s"] = 35
+    assert await desk.handle(c) == ""
+    await asyncio.sleep(0.05)
+    assert desk.playing() is not None, "准备期间占着"
+    clock[0] = deter.PREP_S + 1
+    for _ in range(30):
+        await asyncio.sleep(0.05)
+        if any(d.get("ended") == "failed" for _, d in ev):
+            break
+    assert any(d.get("ended") == "failed" and "准备" in d.get("reason", "") for _, d in ev)
+    assert hal.clips == [""], "到点取消起播、再关一次喇叭"
+    assert desk.playing() is None, "放开优先级"
+    stuck.set()
+    await asyncio.sleep(0.05)
+    assert hal.clips == [""], "取消掉的那次不会晚起播"

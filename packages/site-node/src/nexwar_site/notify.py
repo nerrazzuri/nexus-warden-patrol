@@ -162,6 +162,7 @@ class _Watchdog:
     盯的是对象(连接、SMTP),掐的时候读它**当时**的 ``sock``(STARTTLS 换过的也掐得到)。"""
 
     def __init__(self, deadline: float | None) -> None:
+        self.deadline = deadline
         self._objs: list[Any] = []
         self._lock = threading.Lock()
         self.fired = False
@@ -203,11 +204,56 @@ class _Watchdog:
             self._cut(o)
 
 
+#: 外审 1.1 第 13 轮 #2:同时卡在查域名上的最多几个(查域名不能中途掐,卡着的线程不再加)。
+MAX_DNS_HUNG = 8
+_DNS_SLOTS = threading.BoundedSemaphore(MAX_DNS_HUNG)
+
+
+def _resolve(host: str, port: int, deadline: float | None) -> str:
+    """外审 1.1 第 13 轮 #2:查域名也算进这一拍的截止时间。``getaddrinfo`` 掐不断、那时还没有套接字给
+    看门狗掐 —— 放到单独的线程里查,最多等到截止;到点没查到抛 ``socket.timeout``(算没发成)。
+    卡着的线程最多 :data:`MAX_DNS_HUNG` 个,满了的直接算超时。没截止时间、本来就是 IP 的照旧。"""
+    if deadline is None:
+        return host
+    try:
+        socket.inet_pton(socket.AF_INET6 if ":" in host else socket.AF_INET, host)
+        return host
+    except OSError:
+        pass
+    if deadline - time.monotonic() <= 0 or not _DNS_SLOTS.acquire(blocking=False):
+        raise TimeoutError(f"查域名 {host} 没时间了(这一拍时间用完或查域名的都卡着)")
+    box: dict[str, Any] = {}
+    done = threading.Event()
+
+    def run() -> None:
+        try:
+            box["r"] = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        except Exception as exc:                       # noqa: BLE001 - 交回调用的线程去报
+            box["e"] = exc
+        finally:
+            _DNS_SLOTS.release()
+            done.set()
+    threading.Thread(target=run, daemon=True, name="notify-dns").start()
+    if not done.wait(max(0.0, deadline - time.monotonic())):
+        raise TimeoutError(f"查域名 {host} 超时(这一拍时间用完)")
+    if "e" in box:
+        raise box["e"]
+    if not box["r"]:
+        raise socket.gaierror(f"查不到 {host}")
+    return str(box["r"][0][4][0])
+
+
 def _dog_conn(base: type, dog: _Watchdog) -> Callable[..., Any]:
-    """urllib 建连接用的:建出来的连接交给看门狗盯着;连上以后已经到点了就当场算超时。"""
+    """urllib 建连接用的:建出来的连接交给看门狗盯着;连上以后已经到点了就当场算超时。
+    查域名也按截止时间(:func:`_resolve`);HTTPS 的证书、SNI 照旧按域名。"""
     class Conn(base):  # type: ignore[valid-type,misc]
         def connect(self) -> None:
             dog.watch(self)
+            orig = self._create_connection
+
+            def create(addr: Any, *a: Any, **kw: Any) -> Any:
+                return orig((_resolve(addr[0], addr[1], dog.deadline), addr[1]), *a, **kw)
+            self._create_connection = create
             super().connect()
             # 第 8 轮 #1:urllib 拿到回头以后把连接上的 sock 清掉,正文从响应文件接着读 ——
             # 看门狗另外记住这个套接字本身(HTTPS 是包了 TLS 的那个),读正文时到点也掐得到
@@ -295,6 +341,11 @@ class _DeadlineSMTP:
         sock = getattr(self, "sock", None)
         if sock is not None:
             sock.settimeout(min(float(TIMEOUT_S), left))
+
+    def _get_socket(self, host: str, port: int, timeout: float) -> Any:
+        # 外审 1.1 第 13 轮 #2:查域名按截止时间;TLS 的证书、SNI 用的是 self._host(域名),不受影响
+        return super()._get_socket(_resolve(host, port, self._deadline), port,  # type: ignore[misc]
+                                   timeout)
 
     def send(self, s: Any) -> None:
         self._left()
