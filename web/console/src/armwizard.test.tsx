@@ -234,7 +234,8 @@ describe("布防向导", () => {
     expect(changes).toBe(1);   // 外审 3:改成自动派遣也算改过,背后的页要重读
     await next(r, "confirm");
     const plan = posted.find((p) => p.url === "/api/guard/plan")!.body;
-    expect(plan.entries).toEqual([{ route: "guard-1", robot: "", gap_min: 0, shuffle: false, end_standby: true }]);
+    // 1.1-7:新的方案默认随机起点、方向和休息时间
+    expect(plan.entries).toEqual([{ route: "guard-1", robot: "", gap_min: 0, shuffle: true, end_standby: true }]);
     expect(plan.base_revision).toBe(0);
     expect(q(r, "[data-wiz-missing]")).toBeNull();
     const items = () => [...r.container.ownerDocument.querySelectorAll(".wiz-steps li")];
@@ -394,6 +395,18 @@ describe("布防向导", () => {
     expect(doc.querySelector(".wiz-editor select")).toBeNull();
     expect(doc.querySelector(".wiz-editor")!.textContent).toContain("estate-1 · v7");
     expect(location.hash).toBe(before);
+  });
+
+  it("1.1-7:向导里有「随机」的勾;已经存着的那条没勾随机 —— 照它原来的,不替客户改", async () => {
+    plan = { ...plan, revision: 2, entries: [{ id: 2, route: "guard-1", robot: "", gap_min: 0, shuffle: false, end_standby: true }] };
+    const r = await openWiz();
+    await toWho(r);
+    const box = q(r, '[data-wiz-step=who] input[name="shuffle"]') as HTMLInputElement;
+    expect(box).not.toBeNull();
+    await waitFor(() => expect(box.checked).toBe(false));
+    fireEvent.click(r.getByText("下一步"));
+    await waitFor(() => expect(posted.some((p) => p.url === "/api/guard/plan")).toBe(true));
+    expect(posted.find((p) => p.url === "/api/guard/plan")!.body.entries[0].shuffle).toBe(false);
   });
 
   it("用户 11-15:值守方案里已有别的,换之前列出来问;确认了方案只剩这一条", async () => {

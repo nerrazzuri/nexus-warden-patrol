@@ -92,7 +92,8 @@ describe("值守方案面板", () => {
     expect(posted[0].url).toBe("/api/guard/plan");
     expect(posted[0].body).toEqual({
       entries: [{ route: "night-guard", robot: "", gap_min: 30, shuffle: false, end_standby: false },
-        { route: "night-guard", robot: "B", gap_min: 0, shuffle: false, end_standby: true }],
+        // 1.1-7:新加的一条默认随机
+        { route: "night-guard", robot: "B", gap_min: 0, shuffle: true, end_standby: true }],
       limits: { "东区": 40 }, base_revision: 4,
     });
     await waitFor(() => expect(c.textContent).not.toContain("值守方案有改动还没保存"));

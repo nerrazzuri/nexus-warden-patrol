@@ -2228,3 +2228,47 @@ async def test_外审W77_13_1_这一回没有合法的回返点_出防区只停�
     await _跑(t, 3)
     assert _gotos(t, "follow-exit-") == [], "不拿上一回(东区)的位置回去"
     assert not t.duty._fs("A").get("todo"), "停了就算办完"
+
+
+# ---------------------------------------------------------------- 1.1-7 随机巡逻(用户 11-28 批)
+
+async def test_1_1_7_勾了随机_每圈间隔在设的上下随机_平均还是设的(站):
+    t = 站
+    _方案(t, gap_min=10, shuffle=True, limits={"东区": 120, "西区": 120})
+    e, info = t.duty.plan()["entries"][0], t.duty._route("night-guard")
+    xs = [t.duty._jitter(e, info, 600_000) for _ in range(400)]
+    assert all(300_000 <= x <= 900_000 for x in xs), "最多 ±50%"
+    assert len(set(xs)) > 50, "真在随机"
+    assert 540_000 < sum(xs) / len(xs) < 660_000, "平均还是 10 分钟"
+    assert t.duty._jitter(e, info, 60_000) == 60_000, "不到 2 分钟不随机"
+
+
+async def test_1_1_7_防区上限卡住往上的幅度_不让防区超时报警(站):
+    t = 站
+    _方案(t, gap_min=10, shuffle=True, limits={"东区": 12, "西区": 120})
+    e, info = t.duty.plan()["entries"][0], t.duty._route("night-guard")
+    lap_ms = (next(x["lap_s"] for x in t.duty.forecast()["entries"]) or 0) * 1000
+    worst = max(t.duty._jitter(e, info, 600_000) for _ in range(300))
+    assert worst + lap_ms <= 12 * 60_000 - 60_000 + 1000, "一圈 + 间隔不超过东区 12 分钟的线"
+
+
+async def test_1_1_7_随机的一圈_记录写清从哪起_歇多久_下一圈按抽好的出发(站):
+    t = 站
+    _方案(t, gap_min=10, shuffle=True, limits={"东区": 120, "西区": 120})
+    await _跑(t, 3)
+    run = t.duty.status()["runs"][0]
+    rows = t.duty._runs()
+    r = next(iter(rows.values()))
+    gap = r["next_lap_ms"] - r["lap_started_ms"]
+    assert 300_000 <= gap <= 900_000 and run["state"] == "lap"
+    [start] = _log(t, "lap_start")[:1]
+    assert "随机:从 " in start["detail"] and "(设的 10)" in start["detail"]
+
+
+async def test_1_1_7_没勾随机_间隔照旧准点_记录不写随机(站):
+    t = 站
+    _方案(t, gap_min=10, shuffle=False)
+    await _跑(t, 3)
+    r = next(iter(t.duty._runs().values()))
+    assert r["next_lap_ms"] - r["lap_started_ms"] == 600_000
+    assert "随机" not in _log(t, "lap_start")[0]["detail"]
