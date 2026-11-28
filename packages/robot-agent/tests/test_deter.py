@@ -891,3 +891,65 @@ async def test_外审1_1_第5轮_3_旧的一段放完_不清掉已接受还在�
     hal.listener(True, "放完了")                    # 这回是它自己放完
     assert desk.playing() is None
     assert ev[-1][1].get("ended") == "done"
+
+
+async def test_外审1_1_第12轮_1_下载慢_优先级从起播时刻算_准备超时不放(monkeypatch, tmp_path):
+    """收下第 3 秒、第 20 秒才起播的 35 秒喊话:第 39 秒的低优先级自动话术不能截它;
+    第 55 秒(起播 + 35)以后才放开。准备超过 PREP_S 还没起播的:不放、报 failed、放开优先级。"""
+    from nexwar_agent import deter
+    monkeypatch.setattr(deter, "SPEAK_ACK_S", 0.001)
+    clock = [0.0]
+    gate = asyncio.Event()
+
+    class 喇叭(_有回调的喇叭):
+        def sound_clips(self):
+            return ["distance"]
+
+    class 慢链路(_假链路):
+        async def fetch(self, clip):
+            await gate.wait()
+            return await super().fetch(clip)
+    hal, ev = 喇叭(), []
+    desk = deter.DeterDesk(hal, emit=lambda k, d: ev.append((k, d)), monotonic=lambda: clock[0])
+    desk.talk = 慢链路(tmp_path)
+
+    def 命令(cid):
+        c = _喇叭命令("talk:0123456789abcdef", 60, cid)
+        c.payload["max_s"] = 35
+        return c
+
+    job = asyncio.ensure_future(desk.handle(命令("a")))
+    await asyncio.sleep(0)
+    clock[0] = 3.0
+    assert await job == ""
+    clock[0] = 20.0
+    gate.set()
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if hal.clips:
+            break
+    assert hal.clips and hal.clips[-1].startswith("talk:")
+    clock[0] = 39.0
+    assert await desk.auto_sound("distance", priority=40, max_s=15, why="t") is False, \
+        "起播才 19 秒:低优先级的自动话术不能截"
+    clock[0] = 54.0
+    assert await desk.auto_sound("distance", priority=40, max_s=15, why="t") is False
+    clock[0] = 55.5
+    assert await desk.auto_sound("distance", priority=40, max_s=15, why="t") is True, \
+        "起播 + 35 秒以后放开"
+    # 准备超时
+    gate.clear()
+    n = len(hal.clips)
+    clock[0] = 100.0
+    job = asyncio.ensure_future(desk.handle(命令("b")))
+    await asyncio.sleep(0)
+    assert await job == ""
+    clock[0] = 100.0 + deter.PREP_S + 1
+    gate.set()
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if any(d.get("ended") == "failed" for _, d in ev):
+            break
+    assert len(hal.clips) == n, "准备超时:不放"
+    assert any(d.get("ended") == "failed" and "准备" in d.get("reason", "") for _, d in ev)
+    assert desk.playing() is None, "放开优先级"

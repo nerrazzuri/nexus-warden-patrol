@@ -248,7 +248,13 @@ def _post_json(url: str, body: dict[str, Any], headers: dict[str, str] | None = 
         dog.check()                                  # 掐断以后读到的半截不算发成
         return out
     except urllib.error.HTTPError as exc:
-        detail = exc.read(300).decode("utf-8", "replace")
+        try:
+            detail = exc.read(300).decode("utf-8", "replace")
+        except (OSError, TimeoutError, http.client.HTTPException):
+            # 读错误正文时被看门狗掐断 / 对方断开:照样算这一次没发成,别把原始异常漏出去
+            detail = "(正文没读完)"
+        if dog.fired:
+            raise SendError(f"HTTP {exc.code}:这一拍时间用完(对方太慢)") from exc
         raise SendError(f"HTTP {exc.code}:{detail}") from exc
     except (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException) as exc:
         if dog.fired:

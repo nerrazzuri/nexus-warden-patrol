@@ -593,3 +593,20 @@ def test_外审1_1_第8轮_1_HTTP回头很快_正文慢慢传_到点就断(statu
                           deadline=_t.monotonic() + 0.3)
     srv.close()
     assert _t.monotonic() - t0 < 1.0, "读正文时到点也要掐断"
+
+
+def test_外审1_1_第12轮全量_HTTP错误码_读正文时连接断了_照样回SendError():
+    """全量测试里抓到的:回 503 以后读错误正文时连接被掐断 / 重置,原始 OSError 漏出了 _post_json。"""
+    import socket as _s
+    import time as _t
+
+    def reply(conn):
+        conn.recv(4096)
+        conn.sendall(b"HTTP/1.1 503 X\r\nContent-Length: 1000\r\n\r\nxx")
+        _t.sleep(0.3)                                     # 等对面读完头、开始读错误正文
+        conn.setsockopt(_s.SOL_SOCKET, _s.SO_LINGER, b"\x01\x00\x00\x00\x00\x00\x00\x00")
+        conn.close()                                      # RST:读正文时 Connection reset
+    srv, port = _慢服务器(reply)
+    with pytest.raises(SendError, match="HTTP 503"):
+        notify._post_json(f"http://127.0.0.1:{port}/hook", {"a": 1}, timeout=5)
+    srv.close()
