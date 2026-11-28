@@ -77,11 +77,14 @@ class NotifyError(ValueError):
 
 class SendError(Exception):
     """这一次没发出去(网络、密钥、对方拒了)。``sent``:失败之前已经发到的收件人(外审 1.1 #6:
-    重试只发没发到的)。"""
+    重试只发没发到的)。``failed``:这一次试过、没发到的收件人(外审 1.1 第 6 轮 #2:
+    下次先发没试过的)。"""
 
-    def __init__(self, text: str, sent: list[str] | None = None) -> None:
+    def __init__(self, text: str, sent: list[str] | None = None,
+                 failed: list[str] | None = None) -> None:
         super().__init__(text)
         self.sent = list(sent or [])
+        self.failed = list(failed or [])
 
 
 _TOKENISH = (re.compile(r"bot\d+:[A-Za-z0-9_-]{20,}"), re.compile(r"(?i)bearer\s+\S+"),
@@ -177,6 +180,44 @@ def _timeout(ch: dict[str, Any]) -> float:
     return max(1.0, min(float(TIMEOUT_S), dl - time.monotonic()))
 
 
+class _DeadlineSMTP:
+    """外审 1.1 第 6 轮 #3:SMTP 每一步(STARTTLS、登录、每个 RCPT、DATA)收发之前按剩下的时间重设超时,
+    到点就断 —— 慢吞吞的邮件服务器拖不过这一拍的预算。"""
+
+    _deadline: float | None = None
+
+    def _left(self) -> None:
+        dl = self._deadline
+        if dl is None:
+            return
+        left = dl - time.monotonic()
+        if left <= 0:
+            raise TimeoutError("这一拍时间用完")
+        sock = getattr(self, "sock", None)
+        if sock is not None:
+            sock.settimeout(min(float(TIMEOUT_S), left))
+
+    def send(self, s: Any) -> None:
+        self._left()
+        super().send(s)  # type: ignore[misc]
+
+    def getreply(self) -> Any:
+        self._left()
+        return super().getreply()  # type: ignore[misc]
+
+
+class _SMTP(_DeadlineSMTP, smtplib.SMTP):
+    def __init__(self, *a: Any, deadline: float | None = None, **kw: Any) -> None:
+        self._deadline = deadline
+        super().__init__(*a, **kw)
+
+
+class _SMTP_SSL(_DeadlineSMTP, smtplib.SMTP_SSL):
+    def __init__(self, *a: Any, deadline: float | None = None, **kw: Any) -> None:
+        self._deadline = deadline
+        super().__init__(*a, **kw)
+
+
 class Sender:
     """真去发的那一层(测试换成假的)。``ch``:渠道的配置 + 打开了的密钥;
     ``ch["_deadline"]``(可没有):这一拍到哪个 ``time.monotonic()`` 为止。"""
@@ -196,6 +237,7 @@ class Sender:
         外审 1.1 第 5 轮 #1:到了 ``deadline`` 就停,没轮到的下一拍接着。"""
         sent: list[str] = []
         errs: list[str] = []
+        failed: list[str] = []
         for i, t in enumerate(targets):
             if i and deadline is not None and time.monotonic() >= deadline:
                 if errs:
@@ -205,14 +247,16 @@ class Sender:
                 one(t)
             except SendError as exc:
                 errs.append(str(exc))
+                failed.append(t)
                 continue
             except Exception as exc:  # noqa: BLE001 - 原样的异常里可能带着令牌地址
                 errs.append(f"发不出去({type(exc).__name__})")
+                failed.append(t)
                 continue
             sent.append(t)
         if errs:
             more = f"(共 {len(errs)} 个没发到)" if len(errs) > 1 else ""
-            raise SendError(errs[0] + more, sent)
+            raise SendError(errs[0] + more, sent, failed)
 
     def _telegram(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         url = TELEGRAM_URL.format(token=ch["secret"])
@@ -245,10 +289,11 @@ class Sender:
         sec = cfg.get("security") or "starttls"
         try:
             if sec == "ssl":
-                s: smtplib.SMTP = smtplib.SMTP_SSL(host, port, timeout=_timeout(ch),
-                                                   context=ssl.create_default_context())
+                s: smtplib.SMTP = _SMTP_SSL(host, port, timeout=_timeout(ch),
+                                            context=ssl.create_default_context(),
+                                            deadline=ch.get("_deadline"))
             else:
-                s = smtplib.SMTP(host, port, timeout=_timeout(ch))
+                s = _SMTP(host, port, timeout=_timeout(ch), deadline=ch.get("_deadline"))
             with s:
                 if sec == "starttls":
                     s.starttls(context=ssl.create_default_context())
@@ -587,7 +632,12 @@ class NotifyDesk:
         msg = message(site=self.site_name, level=al["level"], kind=al["kind"],
                       title=al["title"], robot=self._robot_name(al["robot"]),
                       ms=al["first_ms"], tz=self._tzinfo(), tier=row["tier"], lang=ch["lang"])
-        todo = dict(ch, targets=[t for t in ch["targets"] if t not in done])
+        # 外审 1.1 第 6 轮 #2:这一轮还没试过的排前面,试过没发到的排后面 —— 前面几个一直超时,
+        # 后面的也轮得到;都试过一遍了再从头来
+        tried = {t for t in (row.get("tried") or "").split("\n") if t}
+        left = [t for t in ch["targets"] if t not in done]
+        todo = dict(ch, targets=[t for t in left if t not in tried]
+                    + [t for t in left if t in tried])
         if deadline is not None:
             todo["_deadline"] = deadline
         try:
@@ -606,10 +656,15 @@ class NotifyDesk:
             err = scrub(str(exc), ch.get("secret"))[:300]
             wait = min(BACKOFF_MAX_S, BACKOFF_BASE_S * 2 ** min(row["attempts"], 10))
             got = done + [t for t in getattr(exc, "sent", []) if t not in done]
+            now_tried = (tried | set(getattr(exc, "failed", []))) - set(got)
+            rest = [t for t in left if t not in got]
+            if set(rest) <= now_tried:                   # 剩下的都试过一遍了:下一轮从头来
+                now_tried = set()
             with self.db.tx() as c:
                 c.execute("UPDATE notify_outbox SET attempts=attempts+1, next_ms=?, error=?, "
-                          "done=?, first_sent_ms=COALESCE(first_sent_ms, ?) WHERE id=?",
+                          "done=?, tried=?, first_sent_ms=COALESCE(first_sent_ms, ?) WHERE id=?",
                           (now + wait * 1000, err, "\n".join(got),
+                           "\n".join(t for t in left if t in now_tried),
                            now if got else None, row["id"]))
             self._mark(ch["id"], error=err)
             log.warning("告警外发(%s)没发出去,%s 秒后再试:%s", ch["name"], wait, err)

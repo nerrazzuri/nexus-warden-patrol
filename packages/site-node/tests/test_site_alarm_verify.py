@@ -479,3 +479,19 @@ def test_外审1_1_第4轮_1_最后一条没核实成_整趟都定了也收驱�
     Server._on_verdict(me, {"id": 2, "verdict": "unverified", "robot_id": "A",
                             "task_id": "inc-1"})
     assert downs and downs[0][:2] == ("A", "inc-1") and "没核实成" in downs[0][2]
+
+
+async def test_外审1_1_第6轮_1_看满之前机器人报有人_不判没人_从人不见了重新数(核):
+    t = 核
+    await _到了(t)
+    t.clock.advance(VERIFY_HOLD_MS / 1000 - 1)
+    t.desk.dispatcher.clients["A"].capabilities.tasks["persons"] = {"state": "ok",
+                                                                    "present": True}
+    t.clock.advance(2)
+    assert t.desk.verify_tick() == 0, "这会儿有人:不能判误报"
+    assert t.desk.list()[0]["verdict"] == ""
+    _能看(t)                                              # 人走了(没报出见人告警)
+    t.clock.advance(2)
+    assert t.desk.verify_tick() == 0, "没人的那段从人不见了重新数"
+    t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
+    assert t.desk.verify_tick() == 1

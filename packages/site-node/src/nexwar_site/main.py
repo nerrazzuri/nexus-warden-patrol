@@ -805,6 +805,11 @@ def cmd_add_admin(home: Path, name: str, password: str, role: str = "admin",
     db = SiteDB(home / "site.db")
     try:
         Accounts(db, now_ms=wall_ms).add(name, password, role=role, display_name=display_name)
+        # 外审 1.1 第 6 轮 #4:同名旧账号留下的人脸资料、经过记录,新人不继承
+        from nexwar_site.faces import FaceBook
+        from nexwar_site.guardpass import GuardPasses
+        FaceBook(db, now_ms=wall_ms).remove(name)
+        GuardPasses(db, now_ms=wall_ms).forget(name)
     finally:
         db.close()
 
@@ -944,6 +949,11 @@ class Server:
         self.guard_passes = GuardPasses(self.db, now_ms=wall_ms, faces=self.faces, desk=self.alerts,
                                         zone_of=self.sightings._zone)
         self.guard_passes.attach(self.dispatcher)
+        # 外审 1.1 第 6 轮 #4:升级前删账号留下的人脸资料、经过记录(同名新账号不能继承)
+        orphans = self.faces.forget_orphans()
+        n_passes = self.guard_passes.forget_orphans()
+        if orphans or n_passes:
+            log.info("删了已不存在账号的人脸资料 %d 份、经过记录 %d 笔", len(orphans), n_passes)
         from nexwar_site.force import ForceWatch
         #: 狗翻倒、被抱起来(W26,决策 52):按狗能力里的状态对账报 P1,布防时被抱起来响警笛。
         self.force = ForceWatch(self.db, self.dispatcher, now_ms=wall_ms, arming=self.arming)

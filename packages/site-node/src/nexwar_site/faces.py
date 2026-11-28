@@ -180,6 +180,15 @@ class FaceBook:
             self._cache = None
         return bool(n)
 
+    def forget_orphans(self) -> list[str]:
+        """外审 1.1 第 6 轮 #4:账号已经不在了的登记(升级前删账号留下的)全删,免得同名的新账号继承。
+        站点启动时跑一次。"""
+        gone = [r["account"] for r in self.db.query(
+            "SELECT account FROM face_book WHERE account NOT IN (SELECT name FROM accounts)")]
+        for name in gone:
+            self.remove(name)
+        return gone
+
     def consented(self, account: str) -> bool:
         """这个人此刻还在登记表里(没撤销)。"""
         return bool(self.db.query("SELECT 1 FROM face_book WHERE account=?", (account,)))

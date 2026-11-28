@@ -777,6 +777,11 @@ class IncidentDesk:
                     if now - row["received_at"] < VERIFY_TIMEOUT_MS:
                         continue
                     verdict = "unverified"
+                elif self._sees_now(rid):
+                    # 第 6 轮 #1:机器人这会儿报有人(驱离还没对账出见人告警):不能判没人。
+                    # 「没人」的那段从人不见了重新数;有人的结论等见人那一路报出来再下
+                    self._watch_from[row["id"]] = None
+                    continue
                 else:
                     if row["id"] in self._watch_from and self._watch_from[row["id"]] is None:
                         self._watch_from[row["id"]] = now
@@ -802,6 +807,14 @@ class IncidentDesk:
             self._publish(self._row(row["id"]))
             n += 1
         return n
+
+    def _sees_now(self, rid: str) -> bool:
+        """机器人最新报的人员状态是「有人」。"""
+        d = self.dispatcher
+        c = d.clients.get(rid) if d is not None else None
+        p = c.capabilities.tasks.get("persons") if c is not None and c.capabilities is not None \
+            else None
+        return isinstance(p, dict) and p.get("present") is True
 
     def _cant_watch(self, rid: str, task_id: Any) -> str:
         """核实观察这会儿能不能算数:空 = 能;否则说为什么不能(外审 1.1 第 2 轮 #1)。"""

@@ -153,6 +153,12 @@ class GuardPasses:
         with self.db.tx() as c:
             return c.execute("DELETE FROM guard_passes WHERE account=?", (account,)).rowcount
 
+    def forget_orphans(self) -> int:
+        """外审 1.1 第 6 轮 #4:账号已经不在了的经过记录全删(站点启动时跑一次)。"""
+        with self.db.tx() as c:
+            return c.execute("DELETE FROM guard_passes WHERE account NOT IN "
+                             "(SELECT name FROM accounts)").rowcount
+
     def tick(self) -> None:
         """站点后台每拍调(外审 1.1 #4):到期删不靠下一次认出人。"""
         self.prune()

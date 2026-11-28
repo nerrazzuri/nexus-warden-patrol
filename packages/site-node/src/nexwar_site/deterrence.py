@@ -607,6 +607,10 @@ class DeterrenceDesk:
         if s.ending is not None:
             return await self._end(rid, s.ending[0], go_back=s.ending[1])
         calm = self._stand_down.pop(rid, None)
+        if calm is not None and (self._persons_now(rid) or {}).get("present") is True:
+            # 外审 1.1 第 6 轮 #1:核实刚说没人,机器人这会儿却报有人:不收,照常对账(记见人、报 P1)
+            log.info("%s 核实说没人,但机器人这会儿看见人了:驱离不收", rid)
+            calm = None
         if calm is not None and calm[0] == s.task_id and not s.seen_person:
             # 第 4 轮 #1:机器人已经在做别的了就只收这一场,不派回待命点(不打断别的任务)
             c = self.dispatcher.clients.get(rid)

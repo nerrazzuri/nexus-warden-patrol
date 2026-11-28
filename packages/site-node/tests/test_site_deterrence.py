@@ -1452,3 +1452,14 @@ async def test_外审1_1_第4轮_1_机器人已经在做别的_收这一场_不�
     t.desk.stand_down("A", "incident-abc", "报警核实没核实成")
     await t.desk.tick()
     assert "A" not in t.desk.sessions and t.disp.on() == set() and t.stb.back == []
+
+
+async def test_外审1_1_第6轮_1_核实说没人_机器人这会儿却看见人_不收_照常记见人报P1(台):
+    t = 台
+    t.desk.alerts = 假告警台()
+    _到了(t.disp)
+    _人员(t, True)
+    t.desk.stand_down("A", "incident-abc", "报警核实:机器人到了现场,没看见人")
+    await t.desk.tick()
+    assert "A" in t.desk.sessions and t.desk.sessions["A"].seen_person, "没收,对账记了见人"
+    assert t.stb.back == [] and len(t.desk.alerts.raised) == 1

@@ -80,7 +80,8 @@ def test_只发文字_英文按种类翻译_中文用站点原文_升档写仍�
     desk.raise_alert(kind="intrusion_person", robot="R1", title="确认有人入侵:东门",
                      context={"pose": {"x": 3.0, "y": 4.0}})
     n.tick()
-    (_, sec, en, al), (_, _, zh, _) = f.sent
+    by = {name: (sec, msg, al) for name, sec, msg, al in f.sent}   # 两个渠道同时发:不看先后
+    (sec, en, al), (_, zh, _) = by["主管群"], by["中文群"]
     assert sec == "123:abc", "发的时候才解开"
     assert en["head"] == "Palm Estate · P1: Intruder confirmed"
     assert "Robot: R1" in en["body"] and "2027-01-15" in en["body"]
@@ -301,7 +302,7 @@ def test_外审1_1_第2轮_6_邮件拒了一部分_只重发拒了的(台, monke
         def send_message(self, m):
             sent.append(m["To"])
             return dict(refuse)
-    monkeypatch.setattr(notify.smtplib, "SMTP", 假SMTP)
+    monkeypatch.setattr(notify, "_SMTP", 假SMTP)
     n.sender = notify.Sender()
     n.save({"kind": "email", "name": "邮件", "targets": ["a@x.my", "b@x.my"], "secret": "pw",
             "config": {"host": "smtp.x.my", "user": "u@x.my"}})
@@ -430,3 +431,80 @@ def test_外审1_1_第5轮_1_预算传到每个收件人_时间到了发到的�
     n.tick()
     assert _队(db)[0]["sent_ms"] is not None, "下几拍接着把剩下的发完"
     assert len(calls) == 10, "发到过的不重发"
+
+
+def test_外审1_1_第6轮_2_前面的收件人一直超时_后面的下一次先发(台, monkeypatch):
+    import time as _t
+    desk, n, f, clock, db = 台
+    monkeypatch.setattr(notify, "CHANNEL_BUDGET_S", 0.25)
+    calls: list = []
+
+    def post(url, body, headers=None, timeout=None):
+        calls.append(url)
+        if "/bad" in url:
+            _t.sleep(0.15)                            # 超时
+            raise SendError("连不上:timeout")
+    monkeypatch.setattr(notify, "_post_json", post)
+    n.sender = notify.Sender()
+    n.save({"kind": "webhook", "name": "钩",
+            "targets": ["https://h/bad1", "https://h/bad2", "https://h/good"]})
+    desk.raise_alert(kind="stuck", robot="R1", title="卡住")
+    n.tick()
+    assert calls == ["https://h/bad1", "https://h/bad2"], "第一次:预算用在前两个上"
+    r = _队(db)[0]
+    assert r["attempts"] == 1 and r["tried"] == "https://h/bad1\nhttps://h/bad2"
+    clock[0] += 60_000
+    calls.clear()
+    n.tick()
+    assert calls[0] == "https://h/good", "下一次:没试过的先发"
+    assert _队(db)[0]["done"] == "https://h/good"
+
+
+def test_外审1_1_第6轮_3_邮件服务器每步都慢_拖不过这一拍的预算(台, monkeypatch):
+    import socket
+    import threading
+    import time as _t
+    desk, n, f, clock, db = 台
+    monkeypatch.setattr(notify, "CHANNEL_BUDGET_S", 0.6)
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+    stop = threading.Event()
+
+    def 慢服务器():
+        conn, _ = srv.accept()
+        conn.settimeout(5)
+        with conn:
+            conn.sendall(b"220 slow ESMTP\r\n")
+            buf = b""
+            while not stop.is_set():
+                try:
+                    got = conn.recv(4096)
+                except OSError:
+                    return
+                if not got:
+                    return
+                buf += got
+                while b"\r\n" in buf:
+                    line, buf = buf.split(b"\r\n", 1)
+                    _t.sleep(0.2)                     # 每一步都慢,但每步都没超过套接字超时
+                    try:
+                        conn.sendall(b"354 go\r\n" if line.upper() == b"DATA" else b"250 ok\r\n")
+                    except OSError:
+                        return
+    th = threading.Thread(target=慢服务器, daemon=True)
+    th.start()
+    n.sender = notify.Sender()
+    n.save({"kind": "email", "name": "邮件", "targets": [f"u{i}@x.my" for i in range(10)],
+            "secret": "pw", "config": {"host": "127.0.0.1", "port": port, "security": "none",
+                                         "from": "a@x.my"}})
+    desk.raise_alert(kind="stuck", robot="R1", title="卡住")
+    t0 = _t.monotonic()
+    n.tick()
+    took = _t.monotonic() - t0
+    stop.set()
+    srv.close()
+    assert took < 1.5, f"十几步、每步 0.2 秒,不能拖过 0.6 秒的预算太多:{took:.2f}"
+    r = _队(db)[0]
+    assert r["sent_ms"] is None and r["attempts"] == 1

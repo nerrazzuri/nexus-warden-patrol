@@ -170,3 +170,38 @@ def test_外审1_1_第5轮_2_建同名账号时清掉以前删账号留下的(�
     assert code == 200
     assert not s.db.query("SELECT 1 FROM face_book WHERE account='zed'")
     assert not s.db.query("SELECT 1 FROM guard_passes WHERE account='zed'")
+
+
+def test_外审1_1_第6轮_4_批准App申请建的同名账号_也不继承旧资料(站点):
+    from nexwar_site.guardpass import GuardPasses
+    s = 站点
+    s.api.guard_passes = GuardPasses(s.db, now_ms=lambda: 5, faces=s.api.faces)
+    alice = _登(s, "alice")
+    s.api.faces.add_photo("wangxm", consent=True, jpeg_b64=_照("face:6"))    # 升级前删账号留下的
+    s.api.guard_passes.seen("R1", "wangxm", how="face", score=0.9)
+    code, d = s.req("POST", "/api/account-requests", {"name": "wangxm", "display": "王小明",
+                                                      "password": "pass-word-123"})
+    assert code == 200, d
+    [r] = s.req("GET", "/api/account-requests", token=alice)[1]["requests"]
+    code, d = s.req("POST", f"/api/account-requests/{r['id']}/approve",
+                    {"confirm_password": PW}, token=alice)
+    assert code == 200, d
+    assert not s.db.query("SELECT 1 FROM face_book WHERE account='wangxm'")
+    assert not s.db.query("SELECT 1 FROM guard_passes WHERE account='wangxm'")
+    me = [0.0] * 128
+    me[6] = 1.0
+    assert s.api.faces.match(me) is None
+
+
+def test_外审1_1_第6轮_4_启动时删掉账号已不在的人脸资料和经过记录(站点):
+    from nexwar_site.guardpass import GuardPasses
+    s = 站点
+    gp = GuardPasses(s.db, now_ms=lambda: 5, faces=s.api.faces)
+    s.api.faces.add_photo("gina", consent=True, jpeg_b64=_照("face:1"))
+    s.api.faces.add_photo("ghost", consent=True, jpeg_b64=_照("face:2"))
+    gp.seen("R1", "gina", how="face", score=0.9)
+    gp.seen("R1", "ghost", how="face", score=0.9)
+    assert s.api.faces.forget_orphans() == ["ghost"]
+    assert gp.forget_orphans() == 1
+    assert [r["account"] for r in s.db.query("SELECT account FROM face_book")] == ["gina"]
+    assert [r["account"] for r in s.db.query("SELECT account FROM guard_passes")] == ["gina"]

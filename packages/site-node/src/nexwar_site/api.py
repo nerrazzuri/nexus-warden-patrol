@@ -2513,6 +2513,7 @@ class _Handler(TlsHandlerMixin):
                                                    by=str(user))
             except AuthError as exc:
                 raise HttpError(400, str(exc)) from exc
+            self._forget_person(name)
             self._audit_target = name
             out = {"name": name, "password": pw, "expires_ms": until, "accounts": acc.list()}
             if d.get("vpn") is True:
@@ -3369,6 +3370,7 @@ class _Handler(TlsHandlerMixin):
                 self._confirm(user, d)
                 out = desk.approve(rid, role=d.get("role"), by=str(user))
                 self._audit_detail = out
+                self._forget_person(str(out["name"]))  # 外审 1.1 第 6 轮 #4:批准建号也不继承旧资料
             else:
                 desk.reject(rid, by=str(user))
                 out = {"ok": True}
