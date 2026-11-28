@@ -191,7 +191,7 @@ class DeterDesk:
         真机 11-20:喊话回执超过 10 s,站点等不到回 504,人以为没发出去。"""
         if req.on and req.clip.startswith("talk:"):
             if self.talk is None:
-                raise HalUnsupported("这台机器人放不了站点的录音(没接狗专用口)")
+                raise HalUnsupported("这台机器人放不了站点的录音(没接机器人专用口)")
             t = asyncio.ensure_future(self._talk_play(req))   # 1.1-4:先从站点拉下来
         else:
             t = asyncio.ensure_future(self.hal.sound(req.clip if req.on else "", req.max_s))
