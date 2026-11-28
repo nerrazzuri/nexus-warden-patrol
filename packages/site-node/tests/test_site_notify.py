@@ -162,7 +162,8 @@ def test_站点没配密钥_不收要令牌的渠道(tmp_path):
 
 def test_真发的报文(monkeypatch):
     got = []
-    monkeypatch.setattr(notify, "_post_json", lambda url, body, headers=None, timeout=None:
+    monkeypatch.setattr(notify, "_post_json",
+                        lambda url, body, headers=None, timeout=None, deadline=None:
                         got.append((url, body, headers or {})))
     s = notify.Sender()
     msg = notify.message(site="S", level="P1", kind="fallen", title="摔倒", robot="R1", ms=NOW,
@@ -233,7 +234,7 @@ def test_外审1_1_第6条_部分收件人失败_只重发没发到的_上限按
     desk, n, f, clock, db = 台
     got, bad = [], {"-2"}
 
-    def post(url, body, headers=None, timeout=None):
+    def post(url, body, headers=None, timeout=None, deadline=None):
         if body["chat_id"] in bad:
             raise SendError("HTTP 502:bad gateway")
         got.append(body["chat_id"])
@@ -256,7 +257,7 @@ def test_外审1_1_第6条_发到一半的也算进每小时上限(台, monkeypa
     desk, n, f, clock, db = 台
     monkeypatch.setattr(notify, "HOURLY_CAP", 1)
 
-    def post(url, body, headers=None, timeout=None):
+    def post(url, body, headers=None, timeout=None, deadline=None):
         if body["chat_id"] == "-2":
             raise SendError("HTTP 502")
     monkeypatch.setattr(notify, "_post_json", post)
@@ -273,7 +274,7 @@ def test_外审1_1_第7条_对方回的错误里的令牌抹掉(台, monkeypatch
     desk, n, f, clock, db = 台
     tok = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdef"
 
-    def post(url, body, headers=None, timeout=None):
+    def post(url, body, headers=None, timeout=None, deadline=None):
         raise SendError(f"HTTP 404:no route {url} access_token=xyz Bearer {tok}")
     monkeypatch.setattr(notify, "_post_json", post)
     n.sender = notify.Sender()
@@ -340,7 +341,7 @@ def test_外审1_1_第2轮_9_别的异常不带令牌_密钥不收控制字符(�
     desk, n, f, clock, db = 台
     tok = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdef"
 
-    def post(url, body, headers=None, timeout=None):
+    def post(url, body, headers=None, timeout=None, deadline=None):
         raise ValueError(f"URL can't contain control characters. {url!r}")
     monkeypatch.setattr(notify, "_post_json", post)
     n.sender = notify.Sender()
@@ -412,7 +413,7 @@ def test_外审1_1_第5轮_1_预算传到每个收件人_时间到了发到的�
     monkeypatch.setattr(notify, "CHANNEL_BUDGET_S", 0.25)
     calls: list = []
 
-    def 慢(url, body, headers=None, timeout=None):
+    def 慢(url, body, headers=None, timeout=None, deadline=None):
         calls.append((url, timeout))
         _t.sleep(0.1)
     monkeypatch.setattr(notify, "_post_json", 慢)
@@ -439,7 +440,7 @@ def test_外审1_1_第6轮_2_前面的收件人一直超时_后面的下一次�
     monkeypatch.setattr(notify, "CHANNEL_BUDGET_S", 0.25)
     calls: list = []
 
-    def post(url, body, headers=None, timeout=None):
+    def post(url, body, headers=None, timeout=None, deadline=None):
         calls.append(url)
         if "/bad" in url:
             _t.sleep(0.15)                            # 超时
@@ -508,3 +509,68 @@ def test_外审1_1_第6轮_3_邮件服务器每步都慢_拖不过这一拍的�
     assert took < 1.5, f"十几步、每步 0.2 秒,不能拖过 0.6 秒的预算太多:{took:.2f}"
     r = _队(db)[0]
     assert r["sent_ms"] is None and r["attempts"] == 1
+
+
+def _慢服务器(reply):
+    """收一个连接:``reply(conn)`` 慢慢回;回完或断了就退。"""
+    import socket
+    import threading
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+
+    def run():
+        try:
+            conn, _ = srv.accept()
+        except OSError:
+            return
+        with conn:
+            try:
+                reply(conn)
+            except OSError:
+                pass
+    threading.Thread(target=run, daemon=True).start()
+    return srv, srv.getsockname()[1]
+
+
+def test_外审1_1_第7轮_1_邮件一次回复一行一行慢慢回_也拖不过预算(台, monkeypatch):
+    import time as _t
+    desk, n, f, clock, db = 台
+    monkeypatch.setattr(notify, "CHANNEL_BUDGET_S", 0.5)
+
+    def reply(conn):
+        conn.sendall(b"220 slow ESMTP\r\n")
+        conn.recv(1024)                                   # EHLO
+        for _ in range(200):                              # 多行回复,一行 0.1 秒,永远不完
+            _t.sleep(0.1)
+            conn.sendall(b"250-still here\r\n")
+    srv, port = _慢服务器(reply)
+    n.sender = notify.Sender()
+    n.save({"kind": "email", "name": "邮件", "targets": ["u@x.my"], "secret": "pw",
+            "config": {"host": "127.0.0.1", "port": port, "security": "none", "from": "a@x.my"}})
+    desk.raise_alert(kind="stuck", robot="R1", title="卡住")
+    t0 = _t.monotonic()
+    n.tick()
+    took = _t.monotonic() - t0
+    srv.close()
+    assert took < 1.5, f"一次回复里慢慢回,也要到点就断:{took:.2f}"
+    r = _队(db)[0]
+    assert r["sent_ms"] is None and r["attempts"] == 1
+
+
+def test_外审1_1_第7轮_1_HTTP回头零零碎碎地传_到点就断():
+    import time as _t
+
+    def reply(conn):
+        conn.recv(4096)
+        conn.sendall(b"HTTP/1.1 200 OK\r\n")
+        for _ in range(200):                              # 头一个字节一个字节地慢慢给
+            _t.sleep(0.05)
+            conn.sendall(b"X")
+    srv, port = _慢服务器(reply)
+    t0 = _t.monotonic()
+    with pytest.raises(SendError, match="时间用完"):
+        notify._post_json(f"http://127.0.0.1:{port}/hook", {"a": 1}, timeout=5,
+                          deadline=_t.monotonic() + 0.4)
+    srv.close()
+    assert _t.monotonic() - t0 < 1.2

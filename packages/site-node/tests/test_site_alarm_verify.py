@@ -495,3 +495,46 @@ async def test_外审1_1_第6轮_1_看满之前机器人报有人_不判没人_�
     assert t.desk.verify_tick() == 0, "没人的那段从人不见了重新数"
     t.clock.advance(VERIFY_HOLD_MS / 1000 + 1)
     assert t.desk.verify_tick() == 1
+
+
+def test_外审1_1_第7轮_2_modbus回包太短_当读坏了():
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+
+    def serve():
+        c, _ = srv.accept()
+        req = c.recv(12)
+        tid, _p, _l, unit, _fc, _s, _n = struct.unpack(">HHHBBHH", req)
+        c.sendall(struct.pack(">HHHBBB", tid, 0, 4, unit, 2, 1) + bytes([0b1]))  # 16 路只回 8 路
+        c.close()
+    th = threading.Thread(target=serve)
+    th.start()
+    with pytest.raises(OSError, match="长度不对"):
+        read_inputs("127.0.0.1", port, 1, 16)
+    th.join()
+    srv.close()
+
+
+def test_外审1_1_第7轮_2_一个模块读炸了_别的模块照读_一分钟报输入断了(核):
+    t = 核
+    good = 假模块()
+
+    def read(host, port, unit, n):
+        if host == "10.0.0.8":
+            raise IndexError("index out of range")        # 意外的坏回包
+        return good.read(host, port, unit, n)
+    t.rx._read = read
+    t.rx.alerts = t.alerts
+    _门磁(t, "bad-1", link={"via": "modbus", "host": "10.0.0.8", "port": 502, "unit": 1,
+                          "input": 0, "nc": False})
+    _门磁(t, "pir-2", link={"via": "modbus", "host": "10.0.0.9", "port": 502, "unit": 1,
+                          "input": 0, "nc": False})
+    good.bits[0] = True
+    t.rx.poll_once()
+    t.rx.poll_once()
+    assert [s for s, _ in t.fired] == ["dev-pir-2"], "坏模块不挡后面的模块"
+    t.clock.advance(61)
+    t.rx.poll_once()
+    assert _开着(t, "alarm_input_lost") and "index" in t.rx.status["bad-1"]["error"]

@@ -21,11 +21,14 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import http.client
 import json
 import logging
 import re
 import smtplib
+import socket
 import ssl
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -152,19 +155,103 @@ def test_message(site: str, lang: str) -> dict[str, str]:
 # ---------------------------------------------------------------- 渠道
 
 
+class _Watchdog:
+    """外审 1.1 第 7 轮 #1:到了这一拍的截止时间,把盯着的连接的套接字掐断(``shutdown``)——
+    卡在读写里的(一行一行慢慢回、零零碎碎地传)当场出错返回,不管它一次调用里读了几回。
+    盯的是对象(连接、SMTP),掐的时候读它**当时**的 ``sock``(STARTTLS 换过的也掐得到)。"""
+
+    def __init__(self, deadline: float | None) -> None:
+        self._objs: list[Any] = []
+        self._lock = threading.Lock()
+        self.fired = False
+        self._t: threading.Timer | None = None
+        if deadline is not None:
+            self._t = threading.Timer(max(0.0, deadline - time.monotonic()), self._fire)
+            self._t.daemon = True
+            self._t.start()
+
+    def watch(self, obj: Any) -> None:
+        with self._lock:
+            self._objs.append(obj)
+            fired = self.fired
+        if fired:
+            self._cut(obj)
+
+    def check(self) -> None:
+        if self.fired:
+            raise TimeoutError("这一拍时间用完")
+
+    def cancel(self) -> None:
+        if self._t is not None:
+            self._t.cancel()
+
+    @staticmethod
+    def _cut(obj: Any) -> None:
+        s = getattr(obj, "sock", None)
+        if s is not None:
+            try:
+                s.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+    def _fire(self) -> None:
+        with self._lock:
+            self.fired = True
+            objs = list(self._objs)
+        for o in objs:
+            self._cut(o)
+
+
+def _dog_conn(base: type, dog: _Watchdog) -> Callable[..., Any]:
+    """urllib 建连接用的:建出来的连接交给看门狗盯着;连上以后已经到点了就当场算超时。"""
+    class Conn(base):  # type: ignore[valid-type,misc]
+        def connect(self) -> None:
+            dog.watch(self)
+            super().connect()
+            dog.check()
+    return Conn
+
+
+class _DogHTTP(urllib.request.HTTPHandler):
+    def __init__(self, dog: _Watchdog) -> None:
+        super().__init__()
+        self._dog = dog
+
+    def http_open(self, req: Any) -> Any:
+        return self.do_open(_dog_conn(http.client.HTTPConnection, self._dog), req)
+
+
+class _DogHTTPS(urllib.request.HTTPSHandler):
+    def __init__(self, dog: _Watchdog) -> None:
+        super().__init__()
+        self._dog = dog
+
+    def https_open(self, req: Any) -> Any:
+        return self.do_open(_dog_conn(http.client.HTTPSConnection, self._dog), req,
+                            context=self._context)
+
+
 def _post_json(url: str, body: dict[str, Any], headers: dict[str, str] | None = None,
-               timeout: float = TIMEOUT_S) -> bytes:
+               timeout: float = TIMEOUT_S, deadline: float | None = None) -> bytes:
     raw = json.dumps(body, ensure_ascii=False).encode()
     req = urllib.request.Request(url, data=raw, method="POST",
                                  headers={"Content-Type": "application/json", **(headers or {})})
+    dog = _Watchdog(deadline)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r: 
-            return r.read(4096)
+        opener = urllib.request.build_opener(_DogHTTP(dog), _DogHTTPS(dog))
+        with opener.open(req, timeout=timeout) as r:
+            out = r.read(4096)
+        dog.check()                                  # 掐断以后读到的半截不算发成
+        return out
     except urllib.error.HTTPError as exc:
         detail = exc.read(300).decode("utf-8", "replace")
         raise SendError(f"HTTP {exc.code}:{detail}") from exc
-    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+    except (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException) as exc:
+        if dog.fired:
+            raise SendError("连不上:这一拍时间用完(对方太慢)") from exc
         raise SendError(f"连不上:{exc}") from exc
+    finally:
+        dog.cancel()
 
 
 class OutOfTime(SendError):
@@ -181,18 +268,20 @@ def _timeout(ch: dict[str, Any]) -> float:
 
 
 class _DeadlineSMTP:
-    """外审 1.1 第 6 轮 #3:SMTP 每一步(STARTTLS、登录、每个 RCPT、DATA)收发之前按剩下的时间重设超时,
-    到点就断 —— 慢吞吞的邮件服务器拖不过这一拍的预算。"""
+    """外审 1.1 第 6 轮 #3:SMTP 每一步(STARTTLS、登录、每个 RCPT、DATA)收发之前按剩下的时间重设超时;
+    第 7 轮 #1:再加看门狗,到点把套接字掐断(一次回复里一行一行慢慢回也拖不过)。
+    到点报 ``SMTPServerDisconnected``:发完了正文、在 QUIT 时到点的不算没发成。"""
 
     _deadline: float | None = None
+    _dog: _Watchdog | None = None
 
     def _left(self) -> None:
         dl = self._deadline
         if dl is None:
             return
         left = dl - time.monotonic()
-        if left <= 0:
-            raise TimeoutError("这一拍时间用完")
+        if left <= 0 or (self._dog is not None and self._dog.fired):
+            raise smtplib.SMTPServerDisconnected("这一拍时间用完")
         sock = getattr(self, "sock", None)
         if sock is not None:
             sock.settimeout(min(float(TIMEOUT_S), left))
@@ -205,17 +294,37 @@ class _DeadlineSMTP:
         self._left()
         return super().getreply()  # type: ignore[misc]
 
+    def _arm(self, deadline: float | None) -> None:
+        self._deadline = deadline
+        self._dog = _Watchdog(deadline)
+        self._dog.watch(self)
+
+    def close(self) -> None:
+        try:
+            super().close()  # type: ignore[misc]
+        finally:
+            if self._dog is not None:
+                self._dog.cancel()
+
 
 class _SMTP(_DeadlineSMTP, smtplib.SMTP):
     def __init__(self, *a: Any, deadline: float | None = None, **kw: Any) -> None:
-        self._deadline = deadline
-        super().__init__(*a, **kw)
+        self._arm(deadline)
+        try:
+            super().__init__(*a, **kw)
+        except BaseException:
+            self.close()
+            raise
 
 
 class _SMTP_SSL(_DeadlineSMTP, smtplib.SMTP_SSL):
     def __init__(self, *a: Any, deadline: float | None = None, **kw: Any) -> None:
-        self._deadline = deadline
-        super().__init__(*a, **kw)
+        self._arm(deadline)
+        try:
+            super().__init__(*a, **kw)
+        except BaseException:
+            self.close()
+            raise
 
 
 class Sender:
@@ -262,7 +371,7 @@ class Sender:
         url = TELEGRAM_URL.format(token=ch["secret"])
         self._each(ch["targets"], lambda chat: _post_json(
             url, {"chat_id": chat, "text": msg["body"], "disable_web_page_preview": True},
-            timeout=_timeout(ch)), ch.get("_deadline"))
+            timeout=_timeout(ch), deadline=ch.get("_deadline")), ch.get("_deadline"))
 
     def _whatsapp(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
         # 主动发给人要用 Meta 批过的模板(三个参数:站点 · 级别:告警、机器人、时间)
@@ -275,7 +384,8 @@ class Sender:
                                                                     or "en"},
                              "components": [{"type": "body", "parameters": [
                                  {"type": "text", "text": p[:200]} for p in params]}]}},
-                headers={"Authorization": f"Bearer {ch['secret']}"}, timeout=_timeout(ch)),
+                headers={"Authorization": f"Bearer {ch['secret']}"}, timeout=_timeout(ch),
+                deadline=ch.get("_deadline")),
                    ch.get("_deadline"))
 
     def _email(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
@@ -321,7 +431,8 @@ class Sender:
             sig = hmac.new(ch["secret"].encode(), raw, hashlib.sha256).hexdigest()
             headers["X-Nexwar-Signature"] = sig
         self._each(ch["targets"], lambda url: _post_json(url, body, headers,
-                                                          timeout=_timeout(ch)),
+                                                          timeout=_timeout(ch),
+                                                          deadline=ch.get("_deadline")),
                    ch.get("_deadline"))
 
 

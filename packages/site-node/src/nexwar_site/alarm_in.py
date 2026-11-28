@@ -174,7 +174,8 @@ def read_inputs(host: str, port: int, unit: int, count: int, *,
         pdu = _recv(s, length - 1)
     if pdu[0] & 0x80:
         raise OSError(f"IO 模块回异常码 {pdu[1] if len(pdu) > 1 else '?'}")
-    if pdu[0] != 2 or len(pdu) < 2 + pdu[1]:
+    # 外审 1.1 第 7 轮 #2:回的字节要够盖住要读的那几路(短了当读坏了,不当场炸)
+    if pdu[0] != 2 or len(pdu) < 2 or len(pdu) < 2 + pdu[1] or pdu[1] < (count + 7) // 8:
         raise OSError("IO 模块回的长度不对")
     bits = pdu[2:2 + pdu[1]]
     return [bool(bits[i // 8] >> (i % 8) & 1) for i in range(count)]
@@ -314,7 +315,9 @@ class AlarmInputs:
             n = max(d["input"] for d in devs) + 1
             try:
                 bits = self._read(key[0], key[1], key[2], n)
-            except OSError as exc:
+                if len(bits) < n:
+                    raise OSError("IO 模块回的路数不够")
+            except Exception as exc:  # noqa: BLE001 - 外审 1.1 第 7 轮 #2:一个模块坏不挡别的模块
                 first = self._lost.setdefault(key, now)
                 for d in devs:
                     self.status.setdefault(d["id"], {})["error"] = str(exc)[:200]
