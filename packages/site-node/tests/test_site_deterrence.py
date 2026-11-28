@@ -1430,3 +1430,36 @@ async def test_喇叭放不出来_也不算开着(台):
     t.disp.reject = {"speaker"}
     await t.desk.tick()
     assert "speaker" not in t.desk.view()[0]["active"]
+
+
+async def test_外审1_1_第2轮_2_核实说没人_这一趟的驱离下一拍收掉_回待命点(台):
+    t = 台
+    _到了(t.disp)
+    t.desk.stand_down("A", "incident-other", "别的报警")
+    await t.desk.tick()
+    assert "A" in t.desk.sessions, "不是这一趟的结论不动"
+    t.desk.stand_down("A", "incident-abc", "报警核实:机器人到了现场,没看见人")
+    await t.desk.tick()
+    assert "A" not in t.desk.sessions and t.disp.on() == set() and t.stb.back == ["A"]
+    assert "没看见人" in t.disp.pushed[-1]["ended"]
+
+
+async def test_外审1_1_第4轮_1_机器人已经在做别的_收这一场_不派回待命点(台):
+    t = 台
+    _到了(t.disp)
+    t.disp.clients["A"].status.task = SimpleNamespace(task_id="adhoc-x",
+                                                       state=SimpleNamespace(value="done"))
+    t.desk.stand_down("A", "incident-abc", "报警核实没核实成")
+    await t.desk.tick()
+    assert "A" not in t.desk.sessions and t.disp.on() == set() and t.stb.back == []
+
+
+async def test_外审1_1_第6轮_1_核实说没人_机器人这会儿却看见人_不收_照常记见人报P1(台):
+    t = 台
+    t.desk.alerts = 假告警台()
+    _到了(t.disp)
+    _人员(t, True)
+    t.desk.stand_down("A", "incident-abc", "报警核实:机器人到了现场,没看见人")
+    await t.desk.tick()
+    assert "A" in t.desk.sessions and t.desk.sessions["A"].seen_person, "没收,对账记了见人"
+    assert t.stb.back == [] and len(t.desk.alerts.raised) == 1

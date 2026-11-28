@@ -148,7 +148,7 @@ describe("新外壳", () => {
   it("记录与录像:报警、录像、交班留言三个标签在左栏(第五期 G-records)", () => {
     location.hash = "#/recordings";
     const g = render(<Console me={me("guard")} onOut={() => {}} />);
-    expect(Array.from(g.container.querySelectorAll(".ev-left .ev-tabs a")).map((x) => x.textContent)).toEqual(["报警", "录像", "巡逻记录", "交班留言"]);
+    expect(Array.from(g.container.querySelectorAll(".ev-left .ev-tabs a")).map((x) => x.textContent)).toEqual(["报警", "录像", "巡逻记录", "交班留言", "值班簿"]);
     expect(g.container.querySelectorAll(".subtabs:not(.ev-tabs)").length).toBe(0);
     expect(g.container.querySelector('.topnav a[aria-current="page"]')!.textContent).toBe("记录与录像");
   });

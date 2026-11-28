@@ -35,7 +35,7 @@ const en = {
   gGap: "One lap every",
   gGapNone: "Back to back",
   gMin: "{n} min",
-  gShuffle: "Random start and direction",
+  gShuffle: "Random start, direction and rest",
   gEndStandby: "Return to standby point after each lap",
   gAdd: "Add a route",
   gRemove: "Remove",
@@ -115,7 +115,7 @@ const zh: Record<GKey, string> = {
   gGap: "每圈间隔",
   gGapNone: "跑完马上下一圈",
   gMin: "{n} 分钟",
-  gShuffle: "随机起点和方向",
+  gShuffle: "随机起点、方向和休息时间",
   gEndStandby: "每圈结束回待命点",
   gAdd: "加一条路线",
   gRemove: "删除",
@@ -301,7 +301,7 @@ export function GuardPanel({ say, now, canEdit }: { say: (s: string) => void; no
         ))}
       </ul>
       {canEdit && routes.length > 0 && (
-        <button type="button" class="btn sm guard-add" onClick={() => setEntries([...entries, { route: routes[0], robot: "", gap_min: 0, shuffle: false, end_standby: true }])}>{gt("gAdd")}</button>
+        <button type="button" class="btn sm guard-add" onClick={() => setEntries([...entries, { route: routes[0], robot: "", gap_min: 0, shuffle: true, end_standby: true }])}>{gt("gAdd")}</button>
       )}
 
       {(plan.clashes ?? []).length > 0 && (

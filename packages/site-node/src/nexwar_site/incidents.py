@@ -34,6 +34,7 @@ from typing import Any
 from nexwar_contract.charging import LOW_PCT
 from nexwar_contract.dispatch import DispatchTimeout
 from nexwar_contract.messages import Event, MapPose
+from nexwar_contract.standoff import TASK_PREFIX as STANDOFF_PREFIX
 from nexwar_site import energy
 from nexwar_site.ca import SAFE_ID
 from nexwar_site.db import SiteDB
@@ -62,6 +63,12 @@ ALERT_OUTCOMES = frozenset({"dispatched", "merged", "no_robot", "unmapped", "dis
 RATE_PER_MIN = 30
 #: 狗到了拦截点拍一张,用哪个相机(W17:现场照片挂在告警上)。狗没报能拍就不拍。
 ARRIVAL_CAMERA = "front"
+#: 1.1-3:机器人到了现场再看这么久没看见人,才算「核实无人」(毫秒)。
+#: 核实时机器人离开过现场(跑过别的任务)。
+AWAY = "机器人被派去做别的了"
+VERIFY_HOLD_MS = 30_000
+#: 1.1-3:报警以后这么久机器人还没到,算没核实成(毫秒)。
+VERIFY_TIMEOUT_MS = 10 * 60_000
 #: 告警没报成的入侵,补报多久以内的(W16 外审)。
 RETELL_MS = 24 * 3600_000
 _TERMINAL = {"task_done": "done", "task_failed": "failed", "task_aborted": "aborted",
@@ -92,6 +99,11 @@ class IncidentDesk:
         self.on_outcome: Callable[[dict[str, Any]], None] | None = None
         self._tell_lock = threading.Lock()
         self._telling: set[int] = set()                # 正在报的(接口线程与事件循环都会报)
+        #: 1.1-3:「先核实」的那条有了结论(:meth:`verify_tick`):``(这一条的账 + verdict)``。
+        self.on_verdict: Callable[[dict[str, Any]], None] | None = None
+        #: 外审 1.1 第 4 轮 #2:首条派失败、并进来的改派或不派了 ——
+        #: 原来挂在旧机器人名下的「去核实」告警号
+        self.on_verify_moved: Callable[[list[str]], None] | None = None
         #: 事件源被限流了(W16):``(事件源名)``。
         self.on_throttled: Callable[[str], None] | None = None
         #: 布防模式(W20,``modes.ArmingDesk``)。没接(老测试、命令行)就当全布防。
@@ -111,6 +123,10 @@ class IncidentDesk:
         self.zone_point: Callable[[str], dict[str, Any] | None] | None = None
         #: 拦截点走不走得到(W23,``intercept_reach.InterceptReach``)。没接(命令行、老测试)就不查。
         self.reach: Any = None
+        #: 外审 1.1 第 2 轮 #1:核实观察中断过(离线、人员检测不可用、被派走)的报警 → 重新能看的时刻
+        self._watch_from: dict[int, int | None] = {}
+        #: 第 3 轮 #3:这次站点启动的时刻。重启前的观察不算数(断没断过没记下来):从启动起再看满一段
+        self._born = now_ms()
         #: 每个事件源最近一分钟收过的时刻。接口是多线程的:「清掉一分钟前的、判断、
         #: 记一笔」得在一把锁里
         #: 一次做完(W16 外审:不加锁 40 个并发请求全放行)。
@@ -456,6 +472,7 @@ class IncidentDesk:
         dev = self.devices.by_source(source) if self.devices is not None else None
         if dev is not None:
             ev["_intercept"] = dev["intercept"]
+            ev["_verify"] = bool(dev.get("verify_first"))      # 1.1-3:先核实再报警
         got = self._claim(source, ev)
         if isinstance(got, dict):
             return got
@@ -469,10 +486,11 @@ class IncidentDesk:
             try:
                 iid = c.execute(
                     "INSERT INTO incidents(source, event_id, type, zone, received_at, occurred_at, "
-                    "outcome, note, detail, told_ms) VALUES (?,?,?,?,?,?,?,?,?,NULL)",
+                    "outcome, note, detail, told_ms, verify) VALUES (?,?,?,?,?,?,?,?,?,NULL,?)",
                     (source, ev["event_id"], ev["type"], ev["zone"], self._now(),
                      ev.get("occurred_at"), "received", "",
-                     json.dumps(ev.get("detail") or {}, ensure_ascii=False))).lastrowid
+                     json.dumps(ev.get("detail") or {}, ensure_ascii=False),
+                     int(bool(ev.get("_verify"))))).lastrowid
             except sqlite3.IntegrityError:
                 first = c.execute("SELECT * FROM incidents WHERE source=? AND event_id=?",
                                   (source, ev["event_id"])).fetchone()
@@ -576,6 +594,13 @@ class IncidentDesk:
                             "outcome='merged' ORDER BY id LIMIT 1", (failed,)).fetchone()
             if nxt is None:
                 return
+            # 外审 1.1 第 4 轮 #2:并进来的报警原来已经报成了旧机器人的「去核实」—— 摘下来,
+            # 改派的按新机器人重报(told_ms 清掉,补报那一拍报),旧的那条没人挂了就关
+            moved = sorted({r["verify_alert"] for r in c.execute(
+                "SELECT verify_alert FROM incidents WHERE merged_into=? AND outcome='merged' "
+                "AND verify_alert<>''", (failed,)).fetchall()})
+            c.execute("UPDATE incidents SET verify_alert='', told_ms=NULL WHERE merged_into=? "
+                      "AND outcome='merged' AND verify=1", (failed,))
             on, mode = self.arming.armed(nxt["zone"]) if self.arming is not None else (True, "")
             point = self.intercept(nxt["intercept"])
             stop: tuple[str, str] | None = None
@@ -600,6 +625,11 @@ class IncidentDesk:
                 c.execute("UPDATE incidents SET merged_into=? WHERE merged_into=? AND "
                           "outcome='merged' AND id<>?", (nxt["id"], failed, nxt["id"]))
                 c.execute("UPDATE incidents SET merged_into=NULL WHERE id=?", (nxt["id"],))
+        if moved and self.on_verify_moved is not None:
+            try:
+                self.on_verify_moved(moved)
+            except Exception:
+                log.exception("改派后旧的「去核实」告警没关成")
         if disarmed:
             for i in disarmed:
                 self._publish(self._row(i))
@@ -655,12 +685,15 @@ class IncidentDesk:
                 row = row | {"intercept_pose": {k: point[k] for k in (
                     "name", "map_id", "map_version", "x", "y", "yaw")}}
             try:
-                self.on_outcome(row)
+                key = self.on_outcome(row)
             except Exception:
                 log.exception("入侵 %s 的告警报不出去:下一拍再报", rid)
                 return False
             with self.db.tx() as c:
                 c.execute("UPDATE incidents SET told_ms=? WHERE id=?", (self._now(), rid))
+                if isinstance(key, str) and key:
+                    # 外审 1.1 第 3 轮 #5:这条报警合进了哪条「去核实」告警(按这个下结论,不限条数)
+                    c.execute("UPDATE incidents SET verify_alert=? WHERE id=?", (key, rid))
             return True
         finally:
             with self._tell_lock:
@@ -683,10 +716,129 @@ class IncidentDesk:
         task_id = e.data.get("task_id") if isinstance(e.data, dict) else None
         if result and task_id and task_id.startswith(INCIDENT_PREFIX):
             with self.db.tx() as c:
-                c.execute("UPDATE incidents SET result=? WHERE task_id=?", (result, task_id))
+                c.execute("UPDATE incidents SET result=?, result_ms=? WHERE task_id=?",
+                          (result, self._now(), task_id))
             for r in self.db.query("SELECT id FROM incidents WHERE task_id=?", (task_id,)):
                 self._publish(self._row(r["id"]))
 
     def list(self, limit: int = 100) -> list[dict[str, Any]]:
         return [dict(r) for r in self.db.query("SELECT * FROM incidents ORDER BY id DESC LIMIT ?",
                                                (limit,))]
+
+    # ------------------------------------------------------------ 1.1-3 核实
+
+    def verify_tick(self) -> int:
+        """「先核实」的那几条(报了 P2「去核实」的)下结论:
+
+        - ``person``:派去的机器人从报警起看见了人(``dog_sees_person``,P1 已经由那一路报了);
+        - ``clear``:机器人到了(任务 ``done``)、又过了 :data:`VERIFY_HOLD_MS` 还没看见人;
+        - ``unverified``:机器人没到(任务失败、中止、被抢)或 :data:`VERIFY_TIMEOUT_MS` 还没到
+          —— 没核实成,要报 P1 叫人。
+
+        结论交给 ``on_verdict``(告警那头关 P2、报 P1),报成了才记 ``verdict``(报不出去下一拍再来)。
+        站点告警循环每拍调。回下了几条结论。"""
+        if self.on_verdict is None:
+            return 0
+        now = self._now()
+        n = 0
+        for r in self.db.query(
+                "SELECT * FROM incidents WHERE verify=1 AND verdict='' AND told_ms IS NOT NULL "
+                "AND outcome IN ('dispatched', 'merged') AND received_at>=? ORDER BY id",
+                (now - RETELL_MS,)):
+            row = dict(r)
+            lead = self._row(row["merged_into"]) if row["outcome"] == "merged" \
+                and row.get("merged_into") is not None else row
+            rid = lead.get("robot_id")
+            if not rid:
+                continue
+            # 第 3 轮 #6:驱离中看见人报的是 intrusion_person(还在排队的也算),会话也记了见过人
+            seen = self.db.query(
+                "SELECT 1 FROM alerts WHERE robot=? AND kind IN ('dog_sees_person', "
+                "'intrusion_person') AND last_ms>=? LIMIT 1", (rid, row["received_at"])) \
+                or self.db.query(
+                    "SELECT 1 FROM pending_alerts WHERE robot=? AND kind='intrusion_person' "
+                    "AND created_ms>=? LIMIT 1", (rid, row["received_at"])) \
+                or self.db.query(
+                    "SELECT 1 FROM deter_sessions WHERE robot_id=? AND task_id=? AND person_seen=1 "
+                    "LIMIT 1", (rid, lead.get("task_id") or ""))
+            result, done_ms = lead.get("result"), lead.get("result_ms")
+            why = ""
+            if seen:
+                verdict = "person"
+            elif result == "done" and done_ms is not None:
+                # 外审 1.1 #8:并进来的报警,机器人在它之前就到了 —— 从这条报警起再看满一段才算没人。
+                # 第 2 轮 #1:这一段里机器人要一直在线、人员检测在看、没被派走;断过就从恢复起重新数
+                why = self._cant_watch(rid, lead.get("task_id"))
+                if why == AWAY:
+                    # 第 3 轮 #2:离开过现场就回不来了(做完别的也不在原地):当场算没核实成
+                    verdict = "unverified"
+                elif why:
+                    self._watch_from[row["id"]] = None
+                    if now - row["received_at"] < VERIFY_TIMEOUT_MS:
+                        continue
+                    verdict = "unverified"
+                elif self._sees_now(rid):
+                    # 第 6 轮 #1:机器人这会儿报有人(驱离还没对账出见人告警):不能判没人。
+                    # 「没人」的那段从人不见了重新数;有人的结论等见人那一路报出来再下
+                    self._watch_from[row["id"]] = None
+                    continue
+                else:
+                    if row["id"] in self._watch_from and self._watch_from[row["id"]] is None:
+                        self._watch_from[row["id"]] = now
+                    since = self._watch_from.get(row["id"]) or 0
+                    if now - max(done_ms, row["received_at"], since, self._born) \
+                            < VERIFY_HOLD_MS:
+                        continue
+                    verdict = "clear"
+            elif result in ("failed", "aborted", "preempted") \
+                    or (result is None and now - row["received_at"] >= VERIFY_TIMEOUT_MS):
+                verdict = "unverified"
+            else:
+                continue
+            try:
+                self.on_verdict(row | {"robot_id": rid, "task_id": lead.get("task_id"),
+                                       "verdict": verdict, "why": why})
+            except Exception:
+                log.exception("入侵 %s 的核实结论报不出去:下一拍再报", row["id"])
+                continue
+            self._watch_from.pop(row["id"], None)
+            with self.db.tx() as c:
+                c.execute("UPDATE incidents SET verdict=? WHERE id=?", (verdict, row["id"]))
+            self._publish(self._row(row["id"]))
+            n += 1
+        return n
+
+    def _sees_now(self, rid: str) -> bool:
+        """机器人最新报的人员状态是「有人」。"""
+        d = self.dispatcher
+        c = d.clients.get(rid) if d is not None else None
+        p = c.capabilities.tasks.get("persons") if c is not None and c.capabilities is not None \
+            else None
+        return isinstance(p, dict) and p.get("present") is True
+
+    def _cant_watch(self, rid: str, task_id: Any) -> str:
+        """核实观察这会儿能不能算数:空 = 能;否则说为什么不能(外审 1.1 第 2 轮 #1)。"""
+        d = self.dispatcher
+        c = d.clients.get(rid) if d is not None else None
+        fresh = getattr(d, "_fresh", None)
+        if c is None or c.status is None or not c.status.online \
+                or (callable(fresh) and not fresh(c)):
+            return "机器人离线"
+        p = c.capabilities.tasks.get("persons") if c.capabilities is not None else None
+        if not isinstance(p, dict) or p.get("state") != "ok":
+            return "机器人的人员检测不可用"
+        t = c.status.task
+        if t is not None and t.task_id not in (task_id, f"{STANDOFF_PREFIX}{task_id}"):
+            return AWAY                              # 第 3 轮 #2:跑过别的任务(没做完、做完了都算)
+        return ""
+
+    def task_settled(self, task_id: str, this: int) -> bool:
+        """这一趟(``task_id``)上,除了 ``this``,别的报警都下了「没人」/「没核实成」的结论
+        (没有还在核实的、看见人的、不用核实的真入侵)。外审 1.1 第 3 轮 #4:都没事了驱离才收、
+        机器人才回去。"""
+        rows = self.db.query(
+            "SELECT i.verify, i.verdict FROM incidents i "
+            "LEFT JOIN incidents l ON l.id=i.merged_into "
+            "WHERE i.id<>? AND i.outcome IN ('dispatched', 'merged') "
+            "AND COALESCE(l.task_id, i.task_id)=?", (this, task_id))
+        return all(r["verify"] and r["verdict"] in ("clear", "unverified") for r in rows)

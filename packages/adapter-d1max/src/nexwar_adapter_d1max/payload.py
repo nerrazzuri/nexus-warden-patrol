@@ -304,6 +304,8 @@ class PayloadConfig:
     #: TTS 命令模板,``{lang}`` ``{wav}`` ``{text}`` 会替换。空 = 不支持 TTS(只放录好的话术)。
     tts_command: str = ""
     player: str = "aplay"
+    #: 1.1-4 听回话:麦克风的 ALSA 设备(``arecord -l`` 看)。空 = 没有麦克风。
+    record_device: str = ""
     #: 聚光灯:``{"both": 线圈们}`` = 只有一路;``{"left": …, "right": …}`` = 左右能分开开关。
     spotlight: dict[str, tuple[str, ...]] = field(default_factory=dict)
     #: 警灯:颜色 → 要合上的线圈(RGB 硬接线的灯,黄 = 红 + 绿)。老配置只有一个 ``default``。
@@ -503,6 +505,7 @@ class PayloadConfig:
                    clips_dir=str(audio.get("clips_dir", cls.clips_dir)),
                    tts_command=str(audio.get("tts_command", "")),
                    player=str(audio.get("player", "aplay")),
+                   record_device=str(audio.get("record_device", "")),
                    spotlight={k: _names(v, f"spotlight.{k}") for k, v in spot.items()},
                    strobe_colors={k: _names(v, f"strobe.colors.{k}") for k, v in colors.items()},
                    strobe_default=strobe.get("default", ""), blink_s=blink,
@@ -633,6 +636,8 @@ class Payload:
     def has(self, output: str) -> bool:
         if output == "speaker":
             return bool(self.cfg.audio_device)
+        if output == "mic":                              # 1.1-4 听回话
+            return bool(self.cfg.record_device)
         if output == "siren" and self.cfg.siren_clip and not self.cfg.siren_coil:
             return self._speaker_siren()
         if self.relay is None:
@@ -1200,6 +1205,9 @@ class Payload:
 
     def _resolve(self, clip_or_tts: str) -> tuple[list[str] | None, str]:
         """→ (先跑的 TTS 命令或 None, 要放的 wav 路径)。"""
+        if clip_or_tts.startswith("talk:"):              # 1.1-4:代理转好的按住说话录音
+            from nexwar_adapter_d1max.anbot import talk_path
+            return None, str(talk_path(clip_or_tts))
         if clip_or_tts.startswith("tts:"):
             _, _, rest = clip_or_tts.partition(":")
             lang, _, text = rest.partition(":")
@@ -1217,6 +1225,16 @@ class Payload:
         if not p.is_file():
             raise PayloadError(f"没有这段话术: {clip_or_tts}")
         return None, str(p)
+
+    async def record(self, max_s: float) -> bytes:
+        """1.1-4 听回话:本机 ``arecord`` 录 ``max_s`` 秒(16 kHz 单声道 wav)。"""
+        if not self.cfg.record_device:
+            raise PayloadError("这台机器人没配麦克风(audio.record_device)")
+        from nexwar_adapter_d1max.anbot import record_cmd
+        secs = max(1, min(20, int(round(max_s))))
+        return await record_cmd(["arecord", "-q", "-D", self.cfg.record_device, "-f", "S16_LE",
+                                 "-r", "16000", "-c", "1", "-d", str(secs), "-t", "wav"],
+                                None, secs)
 
     async def sound(self, clip_or_tts: str, max_s: float) -> None:
         """放一段(打断正在放的)。参数不对、没有这段、进程起不来当场报错;**不在这里等 TTS 合成**

@@ -529,6 +529,10 @@ class D1MaxHal:
             return
         await p.sound(clip_or_tts, max_s)
 
+    async def record(self, max_s: float) -> bytes:
+        """1.1-4 听回话:上装的麦克风录一段 wav。"""
+        return await self._up("mic").record(max_s)
+
     def sound_clips(self) -> tuple[str, ...]:
         """喇叭能放的话术(``clips_dir`` 下的 ``*.wav``,不带后缀)。没接喇叭就是空。"""
         if self._payload is None or not self._payload.has("speaker"):
@@ -668,4 +672,4 @@ class D1MaxHal:
                      "imu_hz": IMU_HZ, "joint_effort": False, "foot_force": False},
             actuators={"light": True, "head": False} | {
                 k: self._payload is not None and self._payload.has(k)
-                for k in ("strobe", "siren", "speaker", "spotlight", "wiper", "ptz")})
+                for k in ("strobe", "siren", "speaker", "spotlight", "wiper", "ptz", "mic")})

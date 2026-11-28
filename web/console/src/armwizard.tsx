@@ -60,6 +60,7 @@ const en = {
   who: "Robot",
   whoAny: "Any available robot",
   gap: "Rest between laps",
+  shuffle: "Random start, direction and rest (harder to predict)",
   gapNone: "None (next lap right away)",
   gapMin: "{n} min",
   robotOk: "can patrol",
@@ -145,6 +146,7 @@ const zh: Record<WKey, string> = {
   who: "机器人",
   whoAny: "哪台空就派哪台",
   gap: "每圈之间休息",
+  shuffle: "随机起点、方向和休息时间（不让人摸清规律）",
   gapNone: "不休息（跑完马上下一圈）",
   gapMin: "{n} 分钟",
   robotOk: "能派",
@@ -412,6 +414,11 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
   const [route, setRoute] = useState("");
   const [robot, setRobot] = useState("");
   const [gap, setGap] = useState(0);
+  // 1.1-7(用户 11-28 批):随机起点、方向和间隔,向导里看得到、默认勾上
+  const [shuffle, setShuffle] = useState(true);
+  // 已经存着的那条按它原来的(客户自己定的不替他改);新的默认勾上
+  const oldShuffle = plan?.entries.find((e) => e.route === route)?.shuffle;
+  useEffect(() => { setShuffle(oldShuffle ?? true); }, [oldShuffle, route]);
   // 用户 11-15:每次打开都是一次新的向导 —— 不预选、不预先打勾;防区自己选,时间自己选
   const [time, setTime] = useState<"keep" | "manual" | "daily" | "">("");
   const [picked, setPicked] = useState<string[]>([]);
@@ -565,9 +572,9 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
     // 外审 1 #1 #9:只换这条路线那一行(别的条目一条不动;同一台机器人指定两条由站点拒绝、写原因),
     // 界面上没有的选项(打乱、每圈回待命点)保留原来的
     const old = plan.entries.find((e) => e.route === route);
-    const mine: GuardEntry = { route, robot, gap_min: gap, shuffle: old?.shuffle ?? false, end_standby: old?.end_standby ?? true };
+    const mine: GuardEntry = { route, robot, gap_min: gap, shuffle, end_standby: old?.end_standby ?? true };
     // 用户 11-15:新的一次设置 = 值守方案换成这一条;方案里本来有别的(或这条换了人、换了休息),先列出来问
-    const same = plan.entries.length === 1 && old && old.robot === robot && old.gap_min === gap;
+    const same = plan.entries.length === 1 && old && old.robot === robot && old.gap_min === gap && old.shuffle === shuffle;
     if (plan.entries.length && !same) {
       const list = plan.entries.map((e) => `${routeTitle(e.route)}${lang.value === "zh" ? "（" : " ("}${e.robot ? who(e.robot) : wt("whoAny")}${lang.value === "zh" ? "）" : ")"}`)
         .join(lang.value === "zh" ? "；" : "; ");
@@ -734,6 +741,8 @@ export function ArmWizard({ say, onClose, arming = false, onChanged }: { say: Sa
                 {GAPS.map((g) => <option key={g} value={String(g)}>{g ? wt("gapMin", { n: g }) : wt("gapNone")}</option>)}
               </select>
             </label>
+            <label class="field-inline"><input type="checkbox" name="shuffle" checked={shuffle}
+              onChange={(e) => setShuffle(e.currentTarget.checked)} /> {wt("shuffle")}</label>
           </div>
           <ul class="wiz-robots">
             {robots.length === 0 && <li class="bad">{wt("noRobot")}</li>}

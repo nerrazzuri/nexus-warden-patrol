@@ -77,6 +77,8 @@ LEVEL_OF: dict[str, Level] = {
     # 拦截点上看到人了(W24):驱离中的狗的相机看到人,带人数、距离、截图。入侵告警已经响过铃(决策 29),
     # 这一条是现场情况,照普通 P1 升档。
     "intrusion_person": Level.P1,
+    "intrusion_verifying": Level.P2,     # 1.1-3:报警器报警,机器人去核实(看见人才 P1)
+    "alarm_input_lost": Level.P2,        # 1.1-3:IO 模块读不到(报警输入断了)
     # 驱离中的狗无路可退(W25,决策 40):人逼近、四周都退不了,原地站定等人。
     "deter_cornered": Level.P1,
     "battery_abort": Level.P1,
@@ -125,6 +127,7 @@ LEVEL_OF: dict[str, Level] = {
     "purged_incoming_stuck": Level.P2,
     "backup_verify_failed": Level.P2,
     "push_failed": Level.P2,
+    "notify_failed": Level.P2,           # 1.1-2:WhatsApp / Telegram / 邮件发不出去
     "cert_expiring": Level.P2,
     "cert_renew_failed": Level.P2,          # W55:证书自动续签失败(明天再试)
     "site_disk_low": Level.P2,
@@ -184,6 +187,10 @@ LEVEL_OF: dict[str, Level] = {
     "board_overheat": Level.P1,
     # 热像镜头被挡(W46):夜里找人、看起火少了一只眼,今天之内擦一下
     "lens_blocked": Level.P2,
+    "thermal_fire": Level.P1,                  # 1.1-6 热像起火线
+    "thermal_overheat": Level.P2,              # 1.1-6 热像高温线
+    "thermometry_failed": Level.P2,
+    "alarm_input_overload": Level.P2,          # 外审 1.1 第 11 轮:报警输入积压、收不进来
     # P2:今天之内处理。不影响这一趟巡检能不能跑完,但拖久了会变成 P1
     # (盘满了继续拖,就会变成没法记录;上传积压继续拖,数据就旧到没用)。
     "finding": Level.P2,
@@ -236,6 +243,7 @@ LEVEL_OF: dict[str, Level] = {
     "battery_swap": Level.P3,
     # B1c:授权在场(名单)——狗看见人,但人在授权的防区和时段里:不报 P1,留一条记录
     "authorized_person": Level.P3,
+    "guard_passed": Level.P3,                  # 1.1-1 第 4 步:认出来的保安经过
     # W53:有人手动派了临时巡逻(告诉经理、管理员);排队的那一趟起跑了、作废了(告诉派的人)。
     "adhoc_patrol": Level.P3,
     "backup_requested": Level.P3,     # redesign 第 8 期:保安请求支援(推经理、管理员;只记录)

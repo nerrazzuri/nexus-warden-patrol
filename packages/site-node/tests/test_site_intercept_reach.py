@@ -257,3 +257,23 @@ def test_W70_通道宽1米_跟Nav2一样算走得通_0点8米照样不通(台, t
     t.cat.import_dir(src, map_id="house", version="m1")
     assert t.reach.reachable("house", "m1", (1.5, 2.0), (6.0, 2.0)) is True
     assert t.reach.reachable("house", "narrow", (1.5, 2.0), (6.0, 2.0)) is False
+
+
+async def test_外审1_1_第4轮_2_首单没派成_并进来的去核实摘下来按新机器人重报(台):
+    t = 台
+    t.desk.set_intercept("backyard", map_id="house", map_version="wide", x=6.0, y=2.0, yaw=0.0)
+    t.desk.map_zone("back", "backyard")
+    for eid, outcome, merged in (("e1", "dispatch_failed", None), ("e2", "merged", 1),
+                                 ("e3", "merged", 1)):
+        t.db.query("INSERT INTO incidents(source, event_id, type, zone, received_at, outcome, "
+                   "intercept, merged_into, note, detail, told_ms, verify, verify_alert) VALUES "
+                   "('nvr',?,'intrusion','back',1000,?,'backyard',?,'','{}',5,1,?)",
+                   (eid, outcome, merged, "A/intrusion_verifying#1" if merged else ""))
+    t.db.query("UPDATE intercepts SET reach='从待命点无法到达 backyard(门封了)'")
+    moved: list = []
+    t.desk.on_outcome = lambda row: None
+    t.desk.on_verify_moved = moved.append
+    t.desk._promote_follower(1)
+    assert moved == [["A/intrusion_verifying#1"]]
+    rows = {r["event_id"]: r for r in t.desk.list()}
+    assert rows["e2"]["verify_alert"] == "" and rows["e3"]["verify_alert"] == ""

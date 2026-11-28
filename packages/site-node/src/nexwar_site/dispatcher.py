@@ -9,6 +9,7 @@ status/event/reconcile 落库并推给订阅者(站点 API 的 SSE)。
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import queue
@@ -58,6 +59,18 @@ def auto_issuer(by: str) -> bool:
 #: 只落库、不推给事件流和回调的事件:装版本的进度(真机 11-25 进度条;一次装十几条,
 #: 进事件列表就刷屏了)。
 QUIET_EVENTS = ("release_progress",)
+
+
+def private_view(e: Event) -> Event:
+    """外审 1.1 #1:带生物特征的事件(``face_seen`` 的人脸特征值)不落库、不进事件流 —— 只给
+    回调(认保安)看原样;库里、推出去的只剩几张脸、多远。"""
+    if e.kind != "face_seen":
+        return e
+    faces = e.data.get("faces")
+    n = len(faces) if isinstance(faces, list) else 0
+    dist = [f.get("dist_m") for f in faces[:10] if isinstance(f, dict)] \
+        if isinstance(faces, list) else []
+    return dataclasses.replace(e, data={"faces": n, "dist_m": dist, "redacted": True})
 
 _HEAD_TEXT = {"tail": "机器人尾为前", "unknown": "未知"}
 
@@ -368,11 +381,12 @@ class Dispatcher:
     def _on_event(self, robot_id: str, e: Event) -> None:
         if self._closed:
             return
+        shown = private_view(e)
         with self.db.tx() as c:
             cur = c.execute("INSERT OR IGNORE INTO events(robot_id, boot_id, seq, event_id, kind, "
                             "data, stamp, received_at) VALUES (?,?,?,?,?,?,?,?)",
-                            (robot_id, e.boot_id, e.seq, e.event_id, e.kind, json.dumps(e.data),
-                             e.stamp, self._now()))
+                            (robot_id, e.boot_id, e.seq, e.event_id, e.kind,
+                             json.dumps(shown.data), e.stamp, self._now()))
             fresh = cur.rowcount == 1
         if not fresh:
             return                          # 站点重启后 broker 补投的旧事件:库里有了,不再推
@@ -383,7 +397,7 @@ class Dispatcher:
                 cb(robot_id, e)
             except Exception:
                 log.exception("事件回调炸了(%s %s),其余照常", robot_id, e.kind)
-        self.feed.publish({"kind": "event", "robot_id": robot_id, "event": e.to_wire()})
+        self.feed.publish({"kind": "event", "robot_id": robot_id, "event": shown.to_wire()})
 
     def on_event(self, cb: Callable[[str, Event], None]) -> None:
         self._event_cbs.append(cb)
@@ -1196,6 +1210,9 @@ class Dispatcher:
                               else f"{robot_id} 的聚光灯不分左右")
         if req.color and req.color not in caps.get("strobe_colors", []):
             raise Unsupported(f"{robot_id} 的警灯没有 {req.color} 色")
+        if req.clip.startswith("talk:") and req.output == "speaker" and not caps.get("talk"):
+            # 1.1-4:老代理不认 talk:,按能力在这里挡
+            raise Unsupported(f"{robot_id} 的版本放不了按住说话的录音(要升级机器人软件)")
         if req.on and not self._fresh(c):
             raise DispatchRefused(f"{robot_id} 不在线或状态不新鲜")
         if req.on:

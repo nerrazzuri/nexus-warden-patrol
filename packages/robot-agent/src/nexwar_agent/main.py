@@ -664,6 +664,14 @@ def build(args: argparse.Namespace) -> Assembled:
                                persons_key=_persons_key(args),
                                persons_peer=args.persons_peer)
         runtime.evidence_sealed = sealer is not None   # W30b:能力里报,没封站点报 P2
+        if args.intake is not None and args.tls_cert:   # 1.1-4:按住说话、听回话跟站点搬录音
+            import ssl as _ssl
+
+            from nexwar_agent.talk import TalkLink
+            tctx = _ssl.create_default_context(cafile=args.tls_ca)
+            tctx.load_cert_chain(args.tls_cert, args.tls_key)
+            runtime.deter.talk = TalkLink(args.intake, tctx, Path(args.store_dir) / "talk",
+                                          ffmpeg=os.environ.get("NEXWAR_FFMPEG", "ffmpeg"))
         if args.tls_cert:
             runtime.tls_cert = Path(args.tls_cert)       # 工单 9:能力里报在用证书哪天到期
         if runtime.devices is not None:                 # W40:设备健康补上盘、网络设备
@@ -700,6 +708,13 @@ def build(args: argparse.Namespace) -> Assembled:
             from nexwar_agent.lens import LensWatch, ffmpeg_gray
             runtime.attach_lens(LensWatch(ffmpeg_gray(source("thermal"), args.ffmpeg),
                                           emit=lambda k, d: None))
+        thermo_cfg = extra_cameras(args).get("thermal", {}).get("thermometry")
+        if kind == "rtsp" and thermo_cfg:                      # 1.1-6:热像测温(起火、过热)
+            from nexwar_agent.thermo import ThermoWatch, isapi_reader
+            runtime.attach_thermo(ThermoWatch(
+                isapi_reader(extra_cameras(args)["thermal"]["url"], path=thermo_cfg["path"],
+                             port=thermo_cfg["port"]),
+                hot_c=thermo_cfg["hot_c"], fire_c=thermo_cfg["fire_c"]))
         anchor = getattr(parts.nav, "anchor", None) if parts is not None else None
         if kind == "rtsp" and hasattr(anchor, "lidar_blocked"):
             # W74 四期:被遮挡 = 雷达被挡(定位器报)+ 前 / 后相机全黑或单色,连着 3 秒

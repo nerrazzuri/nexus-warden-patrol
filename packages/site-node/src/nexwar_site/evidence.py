@@ -60,6 +60,24 @@ def safe_join(root: Path, *parts: str) -> Path:
     return out
 
 
+def photo_taken_ms(name: str) -> int | None:
+    """照片的**拍摄**时刻(毫秒):机器人起的名字 ``<点位>__<相机>__<UTC 时刻>.jpg``
+    (``archive.photo_name``)最后一段。拆不开回 ``None``。
+
+    外审 1.1 第 10 轮:收齐时刻(``run_photos.done_ms``)是传到站点的时刻,断网补传的旧照片
+    不能拿它当拍摄时刻。"""
+    from datetime import datetime, timezone
+    stem = Path(name).stem
+    parts = stem.split("__")
+    if len(parts) < 3:
+        return None
+    try:
+        dt = datetime.strptime(parts[-1], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return int(dt.timestamp() * 1000)
+
+
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:

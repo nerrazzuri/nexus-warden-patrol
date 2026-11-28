@@ -50,7 +50,7 @@ async def test_能力里报接了哪几路_能放哪些话术(tmp_path):
                  # W40:仿真上装是 V1.2 那套
                  "spotlight_sides": ["left", "right"],
                  "strobe_colors": ["red", "yellow", "green", "blue", "white"],
-                 "strobe_default": "red", "siren_via": "speaker"}
+                 "strobe_default": "red", "siren_via": "speaker", "talk": False}
     await rt.close()
 
 
@@ -681,8 +681,10 @@ async def test_真机1120_喊话慢_3秒内先回执_后台做完照常_做不�
     assert ev[-1][1]["on"] is True and desk.playing() is not None
     hal.fail = "竞品主控的播音程序没连上"
     gate.set()
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
+    for _ in range(50):                                   # 后台起播的结果传回来要几轮事件循环
+        await asyncio.sleep(0.01)
+        if ev[-1][1].get("ended"):
+            break
     assert ev[-1][1] == {"task_id": "deter-c", "output": "speaker", "on": False,
                          "ended": "failed", "reason": "竞品主控的播音程序没连上"}
     assert desk.playing() is None
@@ -708,3 +710,282 @@ async def test_真机1125_站点说放不放跟人有关的自动话术_能力�
     await broker.drain()
     assert ears.by["cmd/ack"][-1]["result"] == "rejected"
     await rt.close()
+
+
+class _假链路:
+    def __init__(self, tmp_path, *, fail=""):
+        self.tmp, self.fail, self.up = tmp_path, fail, []
+
+    async def fetch(self, clip):
+        if self.fail:
+            raise RuntimeError(self.fail)
+        p = self.tmp / f"talk-{clip[5:]}.wav"
+        p.write_bytes(b"RIFF")
+        return p
+
+    async def upload(self, clip, data):
+        if self.fail:
+            raise RuntimeError(self.fail)
+        self.up.append((clip, data[:4]))
+
+
+async def test_1_1_4_接了站点的录音才报talk和mic_放录音先拉再放_听回话录了传回去(tmp_path):
+    broker, c, ears, dog, rt = await _台(tmp_path)
+    tid = "0123456789abcdef"
+    sp = {"output": "speaker", "on": True, "max_s": 35, "clip": f"talk:{tid}", "priority": 60}
+    ack = await _发(rt, broker, ears, sp, "t0", c)
+    assert ack["result"] == "rejected" and ack["reason"] == "unsupported", "没接站点不认 talk:"
+    mic = {"output": "mic", "on": True, "max_s": 5, "clip": f"talk:{tid}"}
+    assert (await _发(rt, broker, ears, mic, "t1", c))["reason"] == "unsupported"
+    rt.deter.talk = link = _假链路(tmp_path)
+    caps = rt.deter.caps()
+    assert caps["talk"] is True and "mic" in caps["outputs"]
+    ack = await _发(rt, broker, ears, sp, "t2", c)
+    assert ack["result"] == "accepted", ack
+    assert dog.deter_clip == f"talk:{tmp_path}/talk-{tid}.wav"
+    ack = await _发(rt, broker, ears, mic, "t3", c)
+    assert ack["result"] == "accepted", ack
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert link.up == [(f"talk:{tid}", b"RIFF")] and dog.recorded_s == 5.0
+    await _跑(rt, broker, n=2, r=dog, c=c)
+    ev = _事件(ears)
+    assert {"task_id": "deter-t3", "output": "mic", "on": False, "ended": "done",
+            "clip": f"talk:{tid}"} in ev
+    await rt.close()
+
+
+async def test_1_1_4_拉不下来回设备的错_传不上记一条失败(tmp_path):
+    broker, c, ears, dog, rt = await _台(tmp_path)
+    rt.deter.talk = _假链路(tmp_path, fail="站点不给这段录音(HTTP 404)")
+    ack = await _发(rt, broker, ears, {"output": "speaker", "on": True, "max_s": 35,
+                                       "clip": "talk:0123456789abcdef", "priority": 60}, "f1", c)
+    assert ack["result"] == "rejected" and "HTTP 404" in ack["reason"], ack
+    ack = await _发(rt, broker, ears, {"output": "mic", "on": True, "max_s": 5,
+                                       "clip": "talk:0123456789abcdef"}, "f2", c)
+    assert ack["result"] == "accepted"
+    for _ in range(5):
+        await asyncio.sleep(0)
+    await _跑(rt, broker, n=2, r=dog, c=c)
+    [e] = [e for e in _事件(ears) if e.get("ended") == "failed" and e["output"] == "mic"]
+    assert "HTTP 404" in e["reason"]
+    await rt.close()
+
+
+async def test_外审1_1_第10条_录音下得慢_期间放了别的_下完不再放(monkeypatch, tmp_path):
+    from nexwar_agent import deter as dm
+    from nexwar_agent.deter import DeterDesk
+    monkeypatch.setattr(dm, "SPEAK_ACK_S", 0.05)
+    gate = asyncio.Event()
+
+    class 慢链路(_假链路):
+        async def fetch(self, clip):
+            await gate.wait()
+            return await super().fetch(clip)
+
+    class 喇叭(_有回调的喇叭):
+        async def sound(self, clip, max_s):
+            self.clips.append(clip)
+    hal, ev = 喇叭(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    desk.talk = 慢链路(tmp_path)
+    assert await desk.handle(_喇叭命令("talk:0123456789abcdef", 60, "t1")) == ""
+    assert hal.clips == [], "还在下"
+    assert await desk.handle(_喇叭命令("warn-zh", 90, "t2")) == ""
+    assert hal.clips == ["warn-zh"]
+    gate.set()
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert hal.clips == ["warn-zh"], "下完了也不放:已经被后来的喇叭指令取代"
+
+
+async def test_外审1_1_第2轮_10_旧录音下载失败_不清掉后来在放的高优先级(monkeypatch, tmp_path):
+    from nexwar_agent import deter as dm
+    from nexwar_agent.deter import DeterDesk
+    monkeypatch.setattr(dm, "SPEAK_ACK_S", 0.05)
+    gate = asyncio.Event()
+
+    class 坏链路(_假链路):
+        async def fetch(self, clip):
+            await gate.wait()
+            raise OSError("下载超时")
+
+    class 喇叭(_有回调的喇叭):
+        async def sound(self, clip, max_s):
+            self.clips.append(clip)
+    hal, ev = 喇叭(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    desk.talk = 坏链路(tmp_path)
+    assert await desk.handle(_喇叭命令("talk:0123456789abcdef", 60, "t1")) == ""
+    assert await desk.handle(_喇叭命令("warn-zh", 90, "t2")) == ""
+    gate.set()
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert desk.playing() is not None and desk.playing()[0] == 90, "90 那段还在放"
+    assert await desk.handle(_喇叭命令("hello-zh", 50, "t3")) == "busy"
+    assert not [d for k, d in ev if d.get("task_id") == "t1" and d.get("ended") == "failed"]
+
+
+async def test_外审1_1_第4轮_4_起播慢_期间关了喇叭_最后是关的(monkeypatch, tmp_path):
+    from nexwar_agent import deter as dm
+    from nexwar_agent.deter import DeterDesk
+    monkeypatch.setattr(dm, "SPEAK_ACK_S", 0.05)
+    gate = asyncio.Event()
+
+    class 慢喇叭(_有回调的喇叭):
+        async def sound(self, clip, max_s):
+            if clip.startswith("talk:"):
+                await gate.wait()                     # 等功放、起播放器
+            self.clips.append(clip)
+    hal, ev = 慢喇叭(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    desk.talk = _假链路(tmp_path)
+    assert await desk.handle(_喇叭命令("talk:0123456789abcdef", 60, "t1")) == ""
+    for _ in range(5):
+        await asyncio.sleep(0)
+    from nexwar_contract.messages import Command
+    off = asyncio.ensure_future(desk.handle(Command(
+        command_id="t2", task_id="deter-t2", kind="deter", issued_at=1, expires_at=2,
+        control_epoch=1, payload={"output": "speaker", "on": False, "priority": 60})))
+    await asyncio.sleep(0.1)
+    gate.set()
+    await off
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert hal.clips[-1] == "", f"最后生效的是关:{hal.clips}"
+    # 还没起播就被取代的:排到时不做
+    gate.clear()
+    assert await desk.handle(_喇叭命令("talk:fedcba9876543210", 60, "t3")) == ""
+    assert await desk.handle(_喇叭命令("warn-zh", 90, "t4")) == ""
+    gate.set()
+    for _ in range(10):
+        await asyncio.sleep(0)
+    assert hal.clips[-1] == "warn-zh", hal.clips
+
+
+async def test_外审1_1_第5轮_3_旧的一段放完_不清掉已接受还在下载的手动喊话(monkeypatch, tmp_path):
+    from nexwar_agent import deter as dm
+    from nexwar_agent.deter import DeterDesk
+    monkeypatch.setattr(dm, "SPEAK_ACK_S", 0.05)
+    gate = asyncio.Event()
+
+    class 慢链路(_假链路):
+        async def fetch(self, clip):
+            await gate.wait()
+            return await super().fetch(clip)
+
+    class 喇叭(_有回调的喇叭):
+        def sound_clips(self):
+            return ("hello-zh", "warn-zh")
+    hal, ev = 喇叭(), []
+    desk = DeterDesk(hal, emit=lambda k, d: ev.append((k, d)))
+    desk.talk = 慢链路(tmp_path)
+    assert await desk.handle(_喇叭命令("warn-zh", 30, "t0")) == ""
+    assert hal.clips == ["warn-zh"]
+    assert await desk.handle(_喇叭命令("talk:0123456789abcdef", 60, "t1")) == ""
+    hal.listener(True, "放完了")                    # 旧的 warn-zh 自然放完
+    assert desk.playing() is not None and desk.playing()[0] == 60, "手动那条的占用还在"
+    assert await desk.auto_sound("hello-zh", priority=40, max_s=10, why="person") is False
+    gate.set()
+    for _ in range(10):
+        await asyncio.sleep(0)
+    assert hal.clips[-1].startswith("talk:"), f"手动录音照样放出来:{hal.clips}"
+    hal.listener(True, "放完了")                    # 这回是它自己放完
+    assert desk.playing() is None
+    assert ev[-1][1].get("ended") == "done"
+
+
+async def test_外审1_1_第12轮_1_下载慢_优先级从起播时刻算_准备超时不放(monkeypatch, tmp_path):
+    """收下第 3 秒、第 20 秒才起播的 35 秒喊话:第 39 秒的低优先级自动话术不能截它;
+    第 55 秒(起播 + 35)以后才放开。准备超过 PREP_S 还没起播的:不放、报 failed、放开优先级。"""
+    from nexwar_agent import deter
+    monkeypatch.setattr(deter, "SPEAK_ACK_S", 0.001)
+    clock = [0.0]
+    gate = asyncio.Event()
+
+    class 喇叭(_有回调的喇叭):
+        def sound_clips(self):
+            return ["distance"]
+
+    class 慢链路(_假链路):
+        async def fetch(self, clip):
+            await gate.wait()
+            return await super().fetch(clip)
+    hal, ev = 喇叭(), []
+    desk = deter.DeterDesk(hal, emit=lambda k, d: ev.append((k, d)), monotonic=lambda: clock[0])
+    desk.talk = 慢链路(tmp_path)
+
+    def 命令(cid):
+        c = _喇叭命令("talk:0123456789abcdef", 60, cid)
+        c.payload["max_s"] = 35
+        return c
+
+    job = asyncio.ensure_future(desk.handle(命令("a")))
+    await asyncio.sleep(0)
+    clock[0] = 3.0
+    assert await job == ""
+    clock[0] = 20.0
+    gate.set()
+    for _ in range(50):                                   # 起播完成、优先级按起播时刻重算
+        await asyncio.sleep(0.01)
+        if desk._started_gen == desk._speak_gen:
+            break
+    assert hal.clips and hal.clips[-1].startswith("talk:")
+    assert desk.playing() == (60, 55.0)
+    clock[0] = 39.0
+    assert await desk.auto_sound("distance", priority=40, max_s=15, why="t") is False, \
+        "起播才 19 秒:低优先级的自动话术不能截"
+    clock[0] = 54.0
+    assert await desk.auto_sound("distance", priority=40, max_s=15, why="t") is False
+    clock[0] = 55.5
+    assert await desk.auto_sound("distance", priority=40, max_s=15, why="t") is True, \
+        "起播 + 35 秒以后放开"
+    # 准备超时
+    gate.clear()
+    n = len(hal.clips)
+    clock[0] = 100.0
+    job = asyncio.ensure_future(desk.handle(命令("b")))
+    await asyncio.sleep(0)
+    assert await job == ""
+    clock[0] = 100.0 + deter.PREP_S + 1
+    gate.set()
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+        if any(d.get("ended") == "failed" for _, d in ev):
+            break
+    assert len(hal.clips) == n, "准备超时:不放"
+    assert any(d.get("ended") == "failed" and "准备" in d.get("reason", "") for _, d in ev)
+    assert desk.playing() is None, "放开优先级"
+
+
+async def test_外审1_1_第13轮_1_HAL起播卡着_也算准备截止(monkeypatch, tmp_path):
+    """到点取消起播、关一次喇叭、报 failed、放开优先级;取消掉的不会晚起播。"""
+    from nexwar_agent import deter
+    monkeypatch.setattr(deter, "SPEAK_ACK_S", 0.001)
+    clock = [0.0]
+    stuck = asyncio.Event()
+
+    class 慢起播(_有回调的喇叭):
+        async def sound(self, clip, max_s):
+            if clip:
+                await stuck.wait()                         # 等功放、连主控……一直起不来
+            self.clips.append(clip)
+    hal, ev = 慢起播(), []
+    desk = deter.DeterDesk(hal, emit=lambda k, d: ev.append((k, d)), monotonic=lambda: clock[0])
+    desk.talk = _假链路(tmp_path)
+    c = _喇叭命令("talk:0123456789abcdef", 60, "a")
+    c.payload["max_s"] = 35
+    assert await desk.handle(c) == ""
+    await asyncio.sleep(0.05)
+    assert desk.playing() is not None, "准备期间占着"
+    clock[0] = deter.PREP_S + 1
+    for _ in range(30):
+        await asyncio.sleep(0.05)
+        if any(d.get("ended") == "failed" for _, d in ev):
+            break
+    assert any(d.get("ended") == "failed" and "准备" in d.get("reason", "") for _, d in ev)
+    assert hal.clips == [""], "到点取消起播、再关一次喇叭"
+    assert desk.playing() is None, "放开优先级"
+    stuck.set()
+    await asyncio.sleep(0.05)
+    assert hal.clips == [""], "取消掉的那次不会晚起播"

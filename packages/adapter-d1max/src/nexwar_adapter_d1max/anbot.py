@@ -316,6 +316,8 @@ class AnbotConfig:
     ssh_key: str = "/home/robot/.nexwar/anbot_ssh"
     #: 竞品 /etc/asound.conf 里跟它自己的讯飞 TTS 同一条的 dmix。
     aplay_device: str = "dmix_oneway_play"
+    #: 1.1-4 听回话:竞品主控上录音的 ALSA 设备(``arecord -l`` 看)。空 = 没有麦克风(不报 ``mic``)。
+    arecord_device: str = ""
     ssh: str = "ssh"
     # HAL 看这两个:能 TTS;录好的话术在哪(没配 audio_host 就当没有)
     tts_command: str = "anbot"
@@ -339,6 +341,8 @@ class AnbotConfig:
                 raise PayloadError(f"{k} 要在 0–60 之间: {v!r}")
         if self.audio_host and not _HOST.fullmatch(str(self.audio_host)):
             raise PayloadError(f"audio_host 要写成 账号@地址: {self.audio_host!r}")
+        if self.arecord_device and not _DEV.fullmatch(str(self.arecord_device)):
+            raise PayloadError(f"arecord_device 只许字母、数字、_ : , . -: {self.arecord_device!r}")
         if not _DEV.fullmatch(str(self.aplay_device)):
             raise PayloadError(f"aplay_device 只许字母、数字、_ : , . -: {self.aplay_device!r}")
         for k in ("ssh_key", "ssh", "clips_dir", "sos_log", "estop_log"):
@@ -376,7 +380,7 @@ class AnbotConfig:
                  "republish_s", "reregister_s", "audio_host", "ssh_key", "aplay_device",
                  "clips_dir", "ssh", "ptz_topic", "wiper_topic", "sos_log", "estop_log",
                  "volume_control", "volume_percent", "volume_card",
-                 "piper", "piper_voices", "ffmpeg", "tts_cache_dir"}
+                 "piper", "piper_voices", "ffmpeg", "tts_cache_dir", "arecord_device"}
         extra = set(d) - known - {"kind"}
         if extra:
             raise PayloadError(f"竞品上装配置里有不认识的项: {', '.join(sorted(extra))}")
@@ -433,6 +437,8 @@ class AnbotPayload:
     # 能力
 
     def has(self, output: str) -> bool:
+        if output == "mic":                              # 1.1-4:配了录音设备、能登竞品主控
+            return bool(self.cfg.arecord_device and self.cfg.audio_host)
         return output in ("strobe", "speaker", "wiper", "ptz")
 
     def options(self) -> dict[str, Any]:
@@ -651,6 +657,13 @@ class AnbotPayload:
     # 喊话
 
     async def sound(self, clip_or_tts: str, max_s: float) -> None:
+        if clip_or_tts.startswith("talk:"):              # 1.1-4:代理转好的按住说话录音
+            if not self.cfg.audio_host:
+                raise PayloadError("没配 audio_host:放不了按住说话的录音")
+            if not 0 < max_s <= MAX_ON_S:
+                raise PayloadError(f"max_s 要在 0–{MAX_ON_S:.0f} 秒之间")
+            await self._play(talk_path(clip_or_tts), max_s)
+            return
         if not clip_or_tts.startswith("tts:"):
             await self._clip(clip_or_tts, max_s)
             return
@@ -694,6 +707,15 @@ class AnbotPayload:
         if not 0 < max_s <= MAX_ON_S:
             raise PayloadError(f"max_s 要在 0–{MAX_ON_S:.0f} 秒之间")
         await self._play(path, max_s)
+
+    async def record(self, max_s: float) -> bytes:
+        """1.1-4 听回话:SSH 到竞品主控跑 ``arecord``,录 ``max_s`` 秒(16 kHz 单声道 wav)。"""
+        if not self.has("mic"):
+            raise PayloadError("这台机器人没配麦克风(arecord_device)")
+        secs = max(1, min(20, int(round(max_s))))
+        cmd, env = self._ssh_cmd(f"arecord -q -D {self.cfg.arecord_device} -f S16_LE -r 16000 "
+                                 f"-c 1 -d {secs} -t wav")
+        return await record_cmd(cmd, env, secs)
 
     async def _play(self, path: Path, max_s: float) -> None:
         await self.stop_sound()
@@ -918,3 +940,34 @@ def load_payload(path: str | Path,
     if kind != "relay":
         raise PayloadError(f"上装 kind 只认 relay、{KIND}: {kind!r}")
     return Payload(PayloadConfig.load(path))
+
+
+#: 1.1-4:代理把站点的录音转成 wav 放在这样名字的文件里(``<store>/talk/talk-<编号>.wav``)。
+_TALK_FILE = re.compile(r"talk-[0-9a-f]{16}\.wav")
+
+
+def talk_path(clip: str) -> Path:
+    """``talk:<代理转好的 wav 的绝对路径>`` → 路径(只认代理写的那种文件名、要在)。"""
+    p = Path(clip[len("talk:"):])
+    if not p.is_absolute() or not _TALK_FILE.fullmatch(p.name) or not p.is_file():
+        raise PayloadError(f"不是代理转好的录音: {clip[:80]!r}")
+    return p
+
+
+async def record_cmd(cmd: list[str], env: dict[str, str] | None, secs: int) -> bytes:
+    """跑录音命令,stdout 就是 wav。超时、退出码不对、没录到都报错。"""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE, start_new_session=True, env=env)
+    except OSError as exc:
+        raise PayloadError(f"录不了音(命令起不来): {exc}") from exc
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(), secs + 10)
+    except asyncio.TimeoutError as exc:
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+        raise PayloadError("录音超时") from exc
+    if proc.returncode != 0 or len(out) <= 44:
+        raise PayloadError("录音失败:" + (err or b"").decode("utf-8", "replace").strip()[:150])
+    return out

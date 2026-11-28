@@ -150,6 +150,8 @@ class GuardDuty:
         self.posts = posts
         self._now = now_ms
         self.rng = rng or random.Random()
+        #: 1.1-7:最近一次随机排的这一圈从哪个点起、倒没倒着走(``_start_lap`` 写进记录后清掉)
+        self._shuffled: dict[str, Any] | None = None
         self.min_pct = min_pct
         #: 告警台(站点接上;事件循环里用)。
         self.alerts: Any = None
@@ -1775,7 +1777,10 @@ class GuardDuty:
             gap = int(e["gap_min"]) * 60_000
             if self._hot(eid, rid, info) is not None:
                 gap = 0                                  # W74 加密巡查:每圈不歇
-            nxt = max(run["lap_started_ms"] + gap, now) if gap else now
+            start_to = run["lap_started_ms"] + gap
+            if gap and e["shuffle"] and run["next_lap_ms"] > run["lap_started_ms"]:
+                start_to = run["next_lap_ms"]            # 1.1-7:这一圈出发时抽好的间隔
+            nxt = max(start_to, now) if gap else now
             # 先记成「等下一圈」:下一圈这一拍派不出去(机器人忙、电量低…)就在 wait 里接着等,
             # 不会每拍把这一圈的「跑完」再记一遍
             self._stuck_since.pop((eid, rid), None)
@@ -1884,11 +1889,28 @@ class GuardDuty:
         if shuffle:
             start = self.rng.randrange(len(keep))
             out = keep[start:] + keep[:start]
-            return out[::-1] if self.rng.random() < 0.5 else out
+            rev = self.rng.random() < 0.5
+            out = out[::-1] if rev else out
+            self._shuffled = {"from": out[0]["name"], "rev": rev}     # 1.1-7:记录里写清楚
+            return out
         order = list(dict.fromkeys(zones))
         oldest = min(order, key=lambda z: (seen.get(z, 0), order.index(z)))
         start = next(i for i, p in enumerate(keep) if p["zone"] == oldest)
         return keep[start:] + keep[:start]
+
+    def _jitter(self, e: dict[str, Any], info: dict[str, Any], gap_ms: int) -> int:
+        """1.1-7(用户 11-28 批):勾了随机的,每圈间隔在设的 N 分钟上下随机(最多 ±50%,平均还是 N)。
+
+        往上不能让这条路线的防区超过「最长多久没人看」(超了要报防区没巡到):幅度取
+        ``min(N/2, 上限 - 一圈 - N - 1 分钟)``,不够就不随机。N < 2 分钟不随机。"""
+        if gap_ms < 2 * 60_000:
+            return gap_ms
+        fc = self.forecast()
+        lap_s = next((x["lap_s"] for x in fc["entries"] if x["id"] == e["id"]), None) or 0.0
+        lims = [z["limit_min"] for z in fc["zones"] if z["zone"] in info["zones"]]
+        room = (min(lims) * 60_000 - lap_s * 1000 - gap_ms - 60_000) if lims else gap_ms / 2
+        d = max(0.0, min(gap_ms / 2, room))
+        return int(round(gap_ms + self.rng.uniform(-d, d), -3)) if d >= 1000 else gap_ms
 
     async def _start_lap(self, e: dict[str, Any], info: dict[str, Any], armed: list[str],
                          rid: str, run: dict[str, Any] | None, *, resume: bool = False,
@@ -1924,6 +1946,12 @@ class GuardDuty:
         tid = f"{GUARD_PREFIX}{eid}-{uuid.uuid4().hex[:10]}"
         lap = (run["lap"] if run else 0) + (0 if resume else 1)
         started = run["lap_started_ms"] if (resume and run) else now
+        shuf, self._shuffled = self._shuffled, None
+        gap_ms = 0 if hot else int(e["gap_min"]) * 60_000
+        if resume and run and gap_ms and run["next_lap_ms"] > started:
+            gap_ms = run["next_lap_ms"] - started          # 接着跑:这一圈的间隔不重抽
+        elif gap_ms and e["shuffle"]:
+            gap_ms = self._jitter(e, info, gap_ms)
         # 外审 r1 #10:加密巡查先看的易藏点也记进这一圈(撤防检查、到点记账都认它们)
         plan = json.dumps([{"name": w["name"], "zone": z} for w, z in hide_z]
                           + [{"name": p["name"], "zone": p["zone"]} for p in pts],
@@ -1933,12 +1961,20 @@ class GuardDuty:
                       "lap, lap_started_ms, next_lap_ms, until_ms, plan, watch_zone, fails) "
                       "VALUES (?,?,?,?,?,?,?,?,0,?,'',?)",
                       (eid, rid, "lap", tid, now, lap, started,
-                       started + (0 if hot else int(e["gap_min"])) * 60_000, plan,
+                       started + gap_ms, plan,
                        run["fails"] if run else 0))
         self._sent_key[rid] = self._need_key(e, info, rid, budget)
+        note = ""
+        if e["shuffle"] and not resume and not hot:
+            # 1.1-7:主管看记录知道是故意随机的,不是机器人乱跑
+            bits = ([f"从 {shuf['from']} 起" + ("、倒着走" if shuf["rev"] else "")] if shuf else [])
+            if int(e["gap_min"]):
+                bits.append(f"这圈开始后约 {round(gap_ms / 60_000)} 分钟出下一圈"
+                            f"(设的 {int(e['gap_min'])})")
+            note = f"(随机:{','.join(bits)})" if bits else ""
         self._log("resume" if resume else "lap_start", robot=rid, entry=eid,
                   detail=(f"第 {lap} 圈接着跑" if resume else f"第 {lap} 圈") + ":"
-                  + "→".join(names))
+                  + "→".join(names) + note)
         from nexwar_site.dispatcher import DispatchRefused
         try:
             r = await self.dispatcher.patrol(rid, mission, issued_by="guard", priority=GUARD_LAP,

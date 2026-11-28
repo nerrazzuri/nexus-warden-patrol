@@ -137,6 +137,9 @@ class AlertDesk:
             # 商业化 A6:没确认的 P1 新起、升档,跟告警同一个事务排进推送队列(记下了就一定会推)
             from nexwar_site.push import enqueue
             enqueue(c, a, self._now())
+        # 1.1-2:同一个事务里排进外发队列(没配渠道就是空表,什么也不排)
+        from nexwar_site import notify
+        notify.enqueue(c, a, self._now())
 
     def backup(self, key: str, *, who: str) -> Alert:
         """redesign 第 8 期 / 外审 2 #2 / 外审 3 #1:保安请求支援 —— 起一条 ``backup_requested``

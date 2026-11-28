@@ -94,6 +94,8 @@ log = logging.getLogger(__name__)
 _PROBLEM_BUNDLE = re.compile(r"^/api/problem-reports/(NW-\d{4}-[0-9A-F]{4})/bundle$")
 _PROBLEM_DELETE = re.compile(r"^/api/problem-reports/(NW-\d{4}-[0-9A-F]{4})/delete$")
 MAX_BODY = 64 * 1024
+#: 事件报告找照片:开跑早于这段多久以内的趟还算(一趟巡逻再长也不过半天)。
+_REPORT_RUN_SPAN_MS = 12 * 3600_000
 #: 网页易用性 P1-77:升级包不对时说人话(不提文件里的东西叫什么)。
 NOT_PKG = "选的文件不是升级包，打不开。请选我们给的 .tar.gz 升级文件。"
 NOT_SITE_PKG = "选的文件不是站点升级包（里面没有升级说明）。请选我们给的站点升级文件。"
@@ -131,6 +133,18 @@ _AREAS = re.compile(r"^/api/maps/([^/]{1,64})/([^/]{1,32})/areas$")
 _HIST = re.compile(r"^/api/layout/history(?:/(\d{1,12})/restore)?$")
 _ARM_EX = re.compile(r"^/api/arming/exceptions/(\d{1,9})/remove$")
 _AUTHZ = re.compile(r"^/api/lists/authorizations(?:/(\d{1,9})/(remove|end))?$")
+#: 1.1-1 认出保安:人脸登记(``me`` = 自己;别人的账号名只能删)
+_FACES = re.compile(r"^/api/faces(?:/([^/]{1,64})(?:/(photo|remove))?)?$")
+#: 1.1-3 触发网址(口令 32 位十六进制)。
+_ALARM_IN = re.compile(r"^/api/alarm-in/([0-9a-f]{32})$")
+_ALARM_IN_ANY = re.compile(r"(/api/alarm-in/)[0-9A-Fa-f]{8,}")
+
+
+def _mask_path(text: str) -> str:
+    """外审 1.1 第 2 轮 #5:报警输入的触发网址里那段口令不进审计、日志。"""
+    return _ALARM_IN_ANY.sub(r"\1***", text)
+#: 1.1-2 告警外发渠道。
+_NOTIFY = re.compile(r"^/api/notify(?:/([0-9]{1,9})(?:/(test|remove))?)?$")
 #: 网页上登记 / 出开通码 / 吊销机器狗(商业化 B1b,管理员)。
 _ADMIN_ROBOT = re.compile(r"^/api/admin/robots(?:/([^/]{1,64})/(code|revoke|name))?$")
 #: W42:机器人轮询自己的绑定申请;站点上的人批准 / 拒绝。
@@ -170,9 +184,14 @@ def _range_args(q: dict[str, list[str]], *, limit_max: int) -> tuple[int, int, i
 #: 告警键 ``robot/kind#seq`` 里有 ``/`` 与 ``#``:客户端整个键编码成一段(``%2F``、``%23``)。
 _ALERT = re.compile(r"^/api/alerts/([^/]{1,256})/"
                     r"(ack|arrive|resolve|reopen|shelve|unshelve|backup)$")
+#: 1.1-5:一条报警的事件报告(能打印的网页)。
+_ALERT_REPORT = re.compile(r"^/api/alerts/([^/]{1,256})/report$")
 #: W00c5c:``/api/robots/<id>/teleop``(WebSocket)与 ``/api/robots/<id>/halt``。
 _TELEOP = re.compile(r"^/api/robots/([^/]{1,64})/"
-                     r"(teleop|halt|resume|supervise|relocalize|home/here|deter|service|posture)$")
+                     r"(teleop|halt|resume|supervise|relocalize|home/here|deter|service|posture"
+                     r"|talk|listen|talks)$")
+#: 1.1-4:一段录音(给人听)。
+_TALK_CLIP = re.compile(r"^/api/talk/([0-9a-f]{16})$")
 #: W00c5b:``/api/robots/<id>/video/<front|back|health>``。
 _VIDEO = re.compile(r"^/api/robots/([^/]{1,64})/video/([a-z]{1,16})$")
 #: W00c5d:运行记录与导出。
@@ -381,6 +400,11 @@ class SiteApi:
         #: 防区多边形、名单(商业化 B1c;站点主程序接上)。
         self.areas: Any = None
         self.authz: Any = None
+        self.faces: Any = None                            # 1.1-1 认出保安
+        self.guard_passes: Any = None                     # 1.1-1 第 4 步 保安经过
+        self.notify: Any = None                           # 1.1-2 告警外发
+        self.alarm_in: Any = None                         # 1.1-3 报警输入
+        self.talk: Any = None                             # 1.1-4 远程喊话
         #: W73:防区的查看点、值守位(``guard_plan.ZonePosts``;第一次用时按防区、路线库的规划现建)。
         self._zone_posts: Any = None
         self._marks: Any = None
@@ -409,6 +433,10 @@ class SiteApi:
         from nexwar_site.shift_notes import ShiftNotes
         self.shift_notes = (ShiftNotes(dispatcher.db, now_ms=self._now)
                             if dispatcher is not None else None)
+        #: 1.1-5:电子值班簿 + 事件报告。
+        from nexwar_site.ob import OccurrenceBook
+        self.ob = (OccurrenceBook(dispatcher.db, now_ms=self._now)
+                   if dispatcher is not None else None)
         #: W44 第二期:站点的零散设置(交班时间、多久没巡过)。
         from nexwar_site.site_settings import SiteSettings
         self.settings = SiteSettings(dispatcher.db) if dispatcher is not None else None
@@ -600,7 +628,7 @@ class _Handler(TlsHandlerMixin):
         code = str(args[1]) if len(args) > 1 else ""
         quiet = line.startswith(("GET ", "HEAD ")) and code[:1] in ("1", "2", "3")
         from nexwar_site.health import redact_text  # 外审 POC I8:网址里的凭证不进日志
-        log.info("%s %s", self.address_string(), redact_text(fmt % args),
+        log.info("%s %s", self.address_string(), _mask_path(redact_text(fmt % args)),
                  extra={"access": quiet})
 
     # ------------------------------------------------------------ 输入输出
@@ -750,7 +778,8 @@ class _Handler(TlsHandlerMixin):
                     from nexwar_site.audit import redact
                     detail.setdefault("request", redact(self._req_body))
                 try:
-                    self.site.audit.record(actor=self._actor, action=f"{method} {path}",
+                    self.site.audit.record(actor=self._actor,
+                                           action=f"{method} {_mask_path(path)}",
                                            target=target, status=self._status,
                                            detail=detail, remote=self.client_address[0])
                 except Exception:
@@ -758,7 +787,7 @@ class _Handler(TlsHandlerMixin):
                 if self._status >= 400:
                     # 日志设计 第 3 条:被拒的写请求进站点日志,带原因、谁、从哪来(原来只有状态码)
                     log.warning("拒绝 %s %s status=%d code=%s actor=%s remote=%s target=%s why=%s",
-                                method, path, self._status,
+                                method, _mask_path(path), self._status,
                                 errcodes.tag(self._resp.get("err_name")), self._actor,
                                 self.client_address[0], target,
                                 str(self._resp.get("error", ""))[:300])
@@ -798,6 +827,9 @@ class _Handler(TlsHandlerMixin):
                 return self._problem_bundle(_PROBLEM_BUNDLE.match(path).group(1), None)
             if method == "POST" and path == "/api/incidents":
                 return self._incident_in()          # 摄像头不登录:验签
+            m = _ALARM_IN.match(path)
+            if m is not None and method in ("GET", "POST"):
+                return self._alarm_in(m.group(1))   # 1.1-3:不会签名的报警设备,网址里带口令
             if method == "POST" and path == "/api/logout":
                 # A 阶段外审 I2:令牌闲置过期了也能退出(连同这次登录登记的手机一起不推);
                 # 拿得出令牌就是那部手机,不用它还有效
@@ -872,6 +904,19 @@ class _Handler(TlsHandlerMixin):
             m = _AUTHZ.match(path)
             if m is not None:
                 return self._authz(method, m.group(1), user, m.group(2))
+            m = _TALK_CLIP.match(path)
+            if m is not None and method == "GET":
+                return self._talk_audio(m.group(1), user)      # 1.1-4:听一段录音
+            m = _NOTIFY.match(path)
+            if m is not None:
+                return self._notify(method, int(m.group(1)) if m.group(1) else None,
+                                    m.group(2), user)
+            if path == "/api/guard-passes":
+                return self._guard_passes(method, user)
+            m = _FACES.match(path)
+            if m is not None:
+                return self._faces(method, unquote(m.group(1)) if m.group(1) else None,
+                                   m.group(2), user)
             m = _ADMIN_ROBOT.match(path)
             if m is not None:
                 self._need(user, MANAGE)
@@ -985,6 +1030,11 @@ class _Handler(TlsHandlerMixin):
                 return self._adhoc_cancel(method, unquote(m.group(1)), user)
             if path == "/api/shift-notes":
                 return self._shift_notes(method, user)
+            if path in ("/api/ob", "/api/ob/print"):
+                return self._ob(method, path, user)               # 1.1-5 值班簿
+            m = _ALERT_REPORT.match(path)
+            if m is not None and method == "GET":
+                return self._alert_report(unquote(m.group(1)), user)   # 1.1-5 事件报告
             if path == "/api/duty-settings":
                 return self._duty_settings(method, user)
             if path == "/api/voice-presets":
@@ -1078,6 +1128,8 @@ class _Handler(TlsHandlerMixin):
                     return self._relocalize(robot_id, user)
                 if m.group(2) == "deter" and method == "POST":
                     return self._deter(robot_id, user)
+                if m.group(2) in ("talk", "listen", "talks"):
+                    return self._talk(robot_id, m.group(2), method, user)   # 1.1-4
                 if m.group(2) == "posture" and method == "POST":
                     return self._posture(robot_id, user)
                 if m.group(2) == "home/here" and method == "POST":
@@ -1130,9 +1182,10 @@ class _Handler(TlsHandlerMixin):
         except (BrokenPipeError, ConnectionResetError, ssl.SSLEOFError) as exc:
             # 第 4 轮 config N7:浏览器关页面、切页面断开了连接,不是站点出错 —— 记一行 INFO,不带栈
             self.close_connection = True
-            log.info("客户端断开了 %s %s(%s)", method, self.path, type(exc).__name__)
+            log.info("客户端断开了 %s %s(%s)", method, _mask_path(self.path),
+                     type(exc).__name__)
         except Exception:                                    # 最后一道:别把栈回给客户端
-            log.exception("站点 API 处理 %s %s 出错", method, self.path)
+            log.exception("站点 API 处理 %s %s 出错", method, _mask_path(self.path))
             self._send_json(500, {"error": "站点内部错误"})
 
     def do_GET(self) -> None:
@@ -1427,6 +1480,109 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, str(exc)) from exc
         self._audit_detail = {"chars": len(note["text"])}
         return self._send_json(200, {"note": note})
+
+    def _ob_lang(self, q: dict[str, list[str]]) -> str:
+        return "zh" if (q.get("lang") or ["en"])[0] == "zh" else "en"
+
+    def _ob(self, method: str, path: str, user) -> None:
+        """1.1-5 值班簿:``GET /api/ob?since=&until=&lang=``(``view``)一本(手写的 + 自动的);
+        ``GET /api/ob/print?…`` 同一本、能打印的网页;``POST /api/ob``
+        ``{category, text, at_ms?, robot?, alert?, corrects?}`` 写一条(``handle_alerts``,作者取登录
+        账号;只追加,写错了另写一条更正)。"""
+        from nexwar_site.ob import ObError, book_html
+        from nexwar_site.sitetime import site_tz
+        ob = self.site.ob
+        if ob is None:
+            raise HttpError(404, "此站点未启用值班簿")
+        if method == "POST" and path == "/api/ob":
+            self._need(user, HANDLE_ALERTS)
+            try:
+                e = ob.add(str(user), self._body())
+            except ObError as exc:
+                raise HttpError(400, str(exc)) from exc
+            self._audit_detail = {"id": e["id"], "category": e["category"],
+                                  "chars": len(e["text"])}
+            return self._send_json(200, {"entry": e})
+        if method != "GET":
+            raise HttpError(405, "只支持 GET/POST")
+        self._need(user, VIEW)
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        try:
+            since, until = int(q["since"][0]), int(q["until"][0])
+        except (KeyError, ValueError) as exc:
+            raise HttpError(400, "要 since、until(毫秒)") from exc
+        lang = self._ob_lang(q)
+        try:
+            book = ob.book(since, until, lang=lang)
+        except ObError as exc:
+            raise HttpError(400, str(exc)) from exc
+        if path == "/api/ob":
+            return self._send_json(200, book)
+        self._audit_view(f"ob/{since}-{until}")
+        page = book_html(book, site=self.site.site_name, tz=site_tz(self.site.dispatcher.db),
+                         lang=lang)
+        return self._send_bytes(page.encode(), "text/html; charset=utf-8")
+
+    def _report_photos(self, robot: str, since: int, until: int) -> list[tuple[str, bytes]]:
+        """报告里的照片:这台机器人那段时间里**拍的**(按拍摄时刻,早的在前),每张 ≤ 2 MB。
+
+        外审 1.1 第 10 轮:原来按收齐时刻(``done_ms``)筛和标 —— 断网补传时,09:00 拍、10:00
+        才传上来的旧照片混进 10:00 的事件,10:00 拍、10:20 才传的现场照片反而漏掉。现在按名字里的
+        拍摄时刻(``photo_taken_ms``)筛、排、标;名字拆不开的才退回收齐时刻。
+        候选:开跑时刻在这段之前 ``_REPORT_RUN_SPAN_MS`` 以内、结束之前的趟。"""
+        from datetime import datetime, timezone
+
+        from nexwar_site.evidence import photo_taken_ms
+        from nexwar_site.sitetime import site_tz
+        runs = self.site.runs
+        if runs is None:
+            return []
+        tz = site_tz(self.site.dispatcher.db)
+
+        def stamp(ms: int) -> str:
+            return datetime.fromtimestamp(ms / 1000, timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        picked: list[tuple[int, Any]] = []
+        for r in self.site.dispatcher.db.query(
+                "SELECT p.run_id, p.name, p.done_ms, r.mission FROM run_photos p "
+                "JOIN runs r ON r.id=p.run_id WHERE r.robot_id=? AND r.stamp>=? AND r.stamp<? "
+                "AND p.name LIKE '%.jpg' LIMIT 5000",
+                (robot, stamp(since - _REPORT_RUN_SPAN_MS), stamp(until + 1000))):
+            taken = photo_taken_ms(r["name"])
+            at = taken if taken is not None else int(r["done_ms"])
+            if since <= at < until:
+                picked.append((at, r))
+        picked.sort(key=lambda t: (t[0], t[1]["name"]))
+        out: list[tuple[str, bytes]] = []
+        for at, r in picked[:32]:
+            try:
+                path = runs.photo(int(r["run_id"]), r["name"])
+                if path.stat().st_size > 2 * 1024 * 1024:
+                    continue
+                data = path.read_bytes()
+            except Exception:                        # noqa: BLE001 - 读不到的那张不放
+                continue
+            when = datetime.fromtimestamp(at / 1000, tz).strftime("%H:%M:%S")
+            out.append((f"{when} · {r['mission']} · {r['name']}", data))
+        return out
+
+    def _alert_report(self, key: str, user) -> None:
+        """1.1-5 ``GET /api/alerts/<key>/report?lang=``:一条报警的事件报告
+        (能打印的网页,照片嵌在里面)。
+        ``view``;进审计。"""
+        from nexwar_site.ob import incident_report, report_html
+        from nexwar_site.sitetime import site_tz
+        self._need(user, VIEW)
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        lang = self._ob_lang(q)
+        try:
+            rep = incident_report(self.site.dispatcher.db, key, lang=lang,
+                                  photos=self._report_photos)
+        except KeyError as exc:
+            raise HttpError(404, f"没有这条报警: {key}") from exc
+        self._audit_view(f"alert/{key}/report")
+        page = report_html(rep, site=self.site.site_name, tz=site_tz(self.site.dispatcher.db),
+                           lang=lang)
+        return self._send_bytes(page.encode(), "text/html; charset=utf-8")
 
     # ------------------------------------------------------------ 布置的历史版本(W44 第三期)
 
@@ -2377,6 +2533,7 @@ class _Handler(TlsHandlerMixin):
                                                    by=str(user))
             except AuthError as exc:
                 raise HttpError(400, str(exc)) from exc
+            self._forget_person(name)
             self._audit_target = name
             out = {"name": name, "password": pw, "expires_ms": until, "accounts": acc.list()}
             if d.get("vpn") is True:
@@ -2396,6 +2553,7 @@ class _Handler(TlsHandlerMixin):
                 acc.remove(name)
             except AuthError as exc:
                 raise HttpError(404 if "没有账号" in str(exc) else 400, str(exc)) from exc
+            self._audit_detail = self._forget_person(name)
             return self._send_json(200, {"accounts": acc.list()})
         if path == "/api/accounts":
             if method == "GET":
@@ -2411,6 +2569,8 @@ class _Handler(TlsHandlerMixin):
                         display_name=d.get("display_name", ""))
             except AuthError as exc:
                 raise HttpError(400, str(exc)) from exc
+            # 外审 1.1 第 5 轮 #2:同名的旧账号以前删掉时留下的(升级前删的),新人不能继承
+            self._forget_person(str(d.get("name")))
             return self._send_json(200, {"accounts": acc.list()})
         if method != "POST":
             raise HttpError(405, "只支持 POST")
@@ -2543,6 +2703,124 @@ class _Handler(TlsHandlerMixin):
             except AuthzError as exc:
                 raise HttpError(400, str(exc)) from exc
         return self._send_json(200, {"authorizations": book.list(with_active=True)})
+
+    def _forget_person(self, name: str) -> dict[str, Any]:
+        """外审 1.1 第 5 轮 #2:账号删了,这个人的人脸特征值、比对缓存、还没写完的登记(撤销代次)
+        和经过记录一起删 —— 不然同名的新账号会继承前人的资料。"""
+        out: dict[str, Any] = {}
+        if self.site.faces is not None and self.site.faces.remove(name):
+            out["faces_deleted"] = True
+        if self.site.guard_passes is not None:
+            n = self.site.guard_passes.forget(name)
+            if n:
+                out["passes_deleted"] = n
+        return out
+
+    def _faces(self, method: str, who: str | None, action: str | None, user) -> None:
+        """1.1-1 人脸登记:``GET /api/faces`` 名单(``manage``);``GET /api/faces/me`` 自己的;
+        ``POST /api/faces/me/photo`` 本人加一张(带 ``consent: true``、``jpeg_b64``);
+        ``POST /api/faces/me/remove`` 本人撤销;``POST /api/faces/{账号}/remove`` 管理员删。
+        不能替别人登记。"""
+        from nexwar_site.faces import FaceError
+        book = self.site.faces
+        if book is None:
+            raise HttpError(404, "此站点未启用人脸登记")
+        me = str(user)
+        if who is None:
+            if method != "GET":
+                raise HttpError(405, "只支持 GET")
+            self._need(user, MANAGE)
+            return self._send_json(200, {"faces": book.list(), "engine": book.engine is not None})
+        if who == "me" and action is None:
+            if method != "GET":
+                raise HttpError(405, "只支持 GET")
+            return self._send_json(200, book.view(me))
+        if method != "POST" or action is None:
+            raise HttpError(405, "只支持 POST")
+        if action == "photo":
+            if who != "me":
+                raise HttpError(403, "只能本人登记自己的脸")
+            d = self._body()
+            self._audit_target = f"faces/{me}"
+            try:
+                v = book.add_photo(me, consent=d.get("consent"), jpeg_b64=d.get("jpeg_b64"))
+            except FaceError as exc:
+                raise HttpError(400, str(exc)) from exc
+            self._audit_detail = {"photos": v["photos"]}
+            return self._send_json(200, v)
+        acc = me if who == "me" else who
+        if acc != me:
+            self._need(user, MANAGE)
+        self._audit_target = f"faces/{acc}"
+        if not book.remove(acc):
+            raise HttpError(404, "这个人没登记过")
+        if self.site.guard_passes is not None:       # 撤销同意:经过记录一起删
+            self._audit_detail = {"passes_deleted": self.site.guard_passes.forget(acc)}
+        return self._send_json(200, book.view(acc) if acc == me else {"faces": book.list()})
+
+    def _guard_passes(self, method: str, user) -> None:
+        """1.1-1 第 4 步 ``GET /api/guard-passes?since=&until=&account=``:保安经过的记录。
+        管理员、经理看所有人(``guardpass.SUPERVISOR_ROLES``);别的人只看自己的。看了进审计。"""
+        gp = self.site.guard_passes
+        if gp is None:
+            raise HttpError(404, "此站点未启用认出保安")
+        if method != "GET":
+            raise HttpError(405, "只支持 GET")
+        self._need(user, VIEW)
+        query = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        now = self.site._now()
+        try:
+            until = int(query.get("until", [now])[0])
+            since = int(query.get("since", [until - 86_400_000])[0])
+        except (TypeError, ValueError) as exc:
+            raise HttpError(400, "since / until 要是毫秒") from exc
+        if not 0 <= since < until or until - since > 31 * 86_400_000:
+            raise HttpError(400, "时间段要在 31 天以内")
+        me = str(user)
+        acc = (query.get("account", [""])[0] or "").strip()[:64] or None
+        from nexwar_site.guardpass import SUPERVISOR_ROLES
+        if getattr(user, "role", "") not in SUPERVISOR_ROLES:
+            if acc not in (None, me):
+                raise HttpError(403, "只能看自己的经过记录")
+            acc = me
+        self._audit_view(f"guard-passes/{acc or '*'}")
+        return self._send_json(200, gp.list(since=since, until=until, account=acc))
+
+    def _notify(self, method: str, cid: int | None, action: str | None, user) -> None:
+        """1.1-2 告警外发渠道(``manage``):``GET /api/notify`` 渠道和最近发的;``POST /api/notify``
+        加一个;``POST /api/notify/{id}`` 改(``secret`` 不给 = 不变);``…/test`` 发一条测试;
+        ``…/remove`` 删。令牌、口令只进不出,审计里不记。"""
+        from nexwar_site.notify import NotifyError
+        desk = self.site.notify
+        if desk is None:
+            raise HttpError(404, "此站点未启用告警外发")
+        self._need(user, MANAGE)
+        if method == "GET" and cid is None:
+            return self._send_json(200, desk.view())
+        if method != "POST":
+            raise HttpError(405, "只支持 POST")
+        self._audit_target = f"notify/{cid if cid is not None else 'new'}"
+        try:
+            if action == "test":
+                r = desk.send_test(cid)
+                self._audit_detail = {"ok": r["ok"]}
+                return self._send_json(200, r)
+            if action == "remove":
+                if not desk.remove(cid):
+                    raise HttpError(404, "没有这个渠道")
+                self._audit_detail = {"removed": cid}
+                return self._send_json(200, desk.view())
+            d = self._body()
+            ch = desk.save(d, cid=cid)
+        except KeyError as exc:
+            raise HttpError(404, "没有这个渠道") from exc
+        except NotifyError as exc:
+            raise HttpError(400, str(exc)) from exc
+        self._audit_target = f"notify/{ch['id']}"
+        self._audit_detail = {"kind": ch["kind"], "name": ch["name"], "targets": len(ch["targets"]),
+                              "levels": ch["levels"], "enabled": ch["enabled"],
+                              "secret_changed": bool(d.get("secret"))}
+        return self._send_json(200, ch)
 
     def _pairing_addresses(self) -> None:
         """手机可能连得上的站点地址(POC):手配的主机名 + 主机网卡的局域网 IPv4,端口是这个接口的端口。
@@ -2719,6 +2997,27 @@ class _Handler(TlsHandlerMixin):
             raise HttpError(400, str(exc)) from exc
         row = self.site.dispatch(lambda: desk.handle(source, body))
         self._send_json(200, row)
+
+    def _alarm_in(self, token: str) -> None:
+        """1.1-3 ``GET|POST /api/alarm-in/<口令>``:设备一触发就调它(不用登录、不用签名;
+        口令只在生成时给一次)。口令对不上一律 404(不让人探)。"""
+        desk = self.site.alarm_in
+        dev = desk.by_token(token) if desk is not None else None
+        if dev is None:
+            log.warning("触发网址口令对不上(%s)", self.client_address[0])
+            raise HttpError(404, "没有这个网址")
+        self._actor = f"source:dev-{dev}"
+        self._audit_target = f"dev-{dev}"
+        if not self._desk().allow(f"dev-{dev}"):
+            raise HttpError(429, "此设备一分钟内报得太多,超出的不收")
+        import uuid
+        body = {"event_id": f"url-{uuid.uuid4().hex[:16]}", "type": "intrusion", "zone": "-",
+                "detail": {"via": "url"}}
+        desk_i = self._desk()
+        row = self.site.dispatch(lambda: desk_i.handle(f"dev-{dev}", body))
+        desk.status.setdefault(dev, {}).update(last_ms=self.site._now(), what="触发网址")
+        self._send_json(200, {"ok": True, "outcome": row.get("outcome"),
+                              "incident": row.get("id")})
 
     def _deterrence(self, method: str, path: str, user) -> None:
         """分级驱离(W22)。看:``view``;就地开一场(W33,``start``)、跳级、往回退:``dispatch``(保安、管理员);解除:``abort``
@@ -3091,6 +3390,7 @@ class _Handler(TlsHandlerMixin):
                 self._confirm(user, d)
                 out = desk.approve(rid, role=d.get("role"), by=str(user))
                 self._audit_detail = out
+                self._forget_person(str(out["name"]))  # 外审 1.1 第 6 轮 #4:批准建号也不继承旧资料
             else:
                 desk.reject(rid, by=str(user))
                 out = {"ok": True}
@@ -3381,7 +3681,11 @@ class _Handler(TlsHandlerMixin):
         if book is None:
             raise HttpError(404, "此站点未启用外部设备登记")
         if method == "GET":
-            return self._send_json(200, {"devices": book.list()})
+            rx = self.site.alarm_in
+            sia = getattr(getattr(rx, "_sia", None), "server_address", None)
+            return self._send_json(200, {"devices": book.list(),
+                                         "status": dict(rx.status) if rx is not None else {},
+                                         "sia_port": sia[1] if sia else None})
         if method != "POST":
             raise HttpError(405, "只支持 GET/POST")
         d = self._body()
@@ -3706,6 +4010,79 @@ class _Handler(TlsHandlerMixin):
                 and ack.get("result") in ("accepted", "duplicate"):
             self._note_warning(alert_key, robot_id, str(d.get("output")), str(user))
         return self._send_json(200, r)
+
+    def _talk(self, robot_id: str, what: str, method: str, user) -> None:
+        """1.1-4 远程喊话:``POST …/talk``(请求体就是录音文件,``Content-Type`` 写格式)存下、让机器人
+        放;``POST …/listen`` ``{seconds?}`` 让机器人录一段回话传回来;
+        ``GET …/talks`` 最近的对讲记录。
+        说、听回话要 ``dispatch``(保安、管理员);看记录 ``view``。"""
+        from nexwar_site.priorities import MANUAL
+        from nexwar_site.talk import LISTEN_SECONDS, MAX_BYTES, MAX_SECONDS, TalkError
+        desk = self.site.talk
+        if desk is None:
+            raise HttpError(404, "此站点未启用远程喊话")
+        self._registered(robot_id)
+        if what == "talks":
+            if method != "GET":
+                raise HttpError(405, "只支持 GET")
+            self._need(user, VIEW)
+            return self._send_json(200, {"talks": desk.list(robot_id)})
+        if method != "POST":
+            raise HttpError(405, "只支持 POST")
+        self._need(user, DISPATCH)
+        self._audit_target = robot_id
+        if what == "talk":
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError as exc:
+                raise HttpError(400, "Content-Length 不是数") from exc
+            if n <= 0:
+                raise HttpError(400, "没有录到声音")
+            if n > MAX_BYTES:
+                raise HttpError(413, f"录音太长(最多 {MAX_SECONDS} 秒)")
+            data = self._read(n)
+            try:
+                clip = desk.save_out(robot_id, str(user), data,
+                                     self.headers.get("Content-Type") or "")
+            except TalkError as exc:
+                raise HttpError(400, str(exc)) from exc
+            d = {"output": "speaker", "on": True, "max_s": float(MAX_SECONDS + 5),
+                 "clip": f"talk:{clip['id']}"}
+        else:
+            body = self._body()
+            secs = body.get("seconds", LISTEN_SECONDS)
+            if isinstance(secs, bool) or not isinstance(secs, int) or not 3 <= secs <= 20:
+                raise HttpError(400, "seconds 要是 3–20 的整数")
+            clip = desk.want_reply(robot_id, str(user))
+            d = {"output": "mic", "on": True, "max_s": float(secs), "clip": f"talk:{clip['id']}"}
+        self._audit_detail = {"talk": clip["id"], "what": what, "bytes": clip["bytes"]}
+        try:
+            r = self.site.dispatch(lambda: self.site.dispatcher.deter(
+                robot_id, d, issued_by=str(user), priority=MANUAL))
+        except HttpError as exc:
+            desk.mark(clip["id"], "refused", str(exc))
+            raise
+        ack = r.get("ack") if isinstance(r, dict) else None
+        ok = isinstance(ack, dict) and ack.get("result") in ("accepted", "duplicate")
+        if not ok:
+            desk.mark(clip["id"], "refused", str((ack or {}).get("reason") or "机器人没接"))
+        elif what == "talk":
+            desk.mark(clip["id"], "sent")
+        return self._send_json(200, {**(r if isinstance(r, dict) else {}),
+                                     "talk": desk.get(clip["id"])})
+
+    def _talk_audio(self, tid: str, user) -> None:
+        """1.1-4 ``GET /api/talk/<编号>``:听一段(自己说的、机器人录回来的)。``view``;进审计。"""
+        desk = self.site.talk
+        if desk is None:
+            raise HttpError(404, "此站点未启用远程喊话")
+        self._need(user, VIEW)
+        try:
+            data, mime = desk.audio(tid)
+        except KeyError as exc:
+            raise HttpError(404, "没有这段录音(只留一天)") from exc
+        self._audit_view(f"talk/{tid}")
+        return self._send_bytes(data, mime)
 
     def _note_warning(self, key: str, robot_id: str, output: str, who: str) -> None:
         """报警的现场里 ``warnings`` 追加一条 ``{at_ms, output, by, robot}``(最多留 20 条);

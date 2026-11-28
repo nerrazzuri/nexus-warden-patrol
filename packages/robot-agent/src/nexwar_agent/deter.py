@@ -29,6 +29,10 @@ log = logging.getLogger(__name__)
 
 #: 喇叭命令等这么久(秒)还没做完就先回执、后台接着做(站点等回执 10 s)。
 SPEAK_ACK_S = 3.0
+#: 外审 1.1 第 12 轮:喇叭指令收下以后,准备(下载录音、转码、合成、连竞品主控)最长多久(秒)。
+#: 准备期间优先级照占;过了还没起播就不放了(报 ``ended: failed``)。真正起播了再从起播时刻
+#: 重算放到几点 —— 慢下载不吃掉播放的时长,保安的录音不会放到一半被低优先级的自动话术截掉。
+PREP_S = 60.0
 
 
 class DeterDesk:
@@ -42,6 +46,21 @@ class DeterDesk:
         self._sound: tuple[int, float] | None = None
         #: 外审:喇叭的仲裁(看优先级 → 起播 / 关 → 记下)一把锁做完,自动播报和手动喊话、关喇叭不交错
         self._speaker_lock = asyncio.Lock()
+        #: 外审 1.1 #10:喇叭指令的代次。录音下载慢、后台放的,下完了代次变了(后来有人关了喇叭、
+        #: 放了别的)就不放了。
+        self._speak_gen = 0
+        #: 外审 1.1 第 4 轮 #4:真正叫 HAL 起播 / 关的那一步排队(等功放、起播放器可能要好几秒);
+        #: 排到的时候代次已经变了的不做 —— 最后生效的总是最新那条指令
+        self._hal_lock = asyncio.Lock()
+        #: 外审 1.1 第 5 轮 #3:``_sound`` 记的是哪一代指令的占用;HAL 上真正起播的是哪一代。
+        #: HAL 回调「放完了」说的是正在放的那段 —— 后来已接受、还没起播(在下载、等功放)的那条的
+        #: 占用不能被它清掉
+        self._sound_gen = 0
+        self._started_gen = 0
+        #: 外审 1.1 第 12 轮:最近这条喇叭指令准备到几点(单调钟)为止,过了还没起播就不放
+        self._prep_until = 0.0
+        #: 1.1-4:跟站点搬录音(``talk.TalkLink``);没接(没有狗专用口)就不认 ``talk:``、``mic``。
+        self.talk: Any = None
         #: 本体灯开着到点关(``max_s``):哪一路 → 关灯的那个任务
         self._light_off: dict[str, asyncio.Task[None]] = {}
         #: 喇叭放完、放坏了、到点了(W21 外审):HAL 回调过来,当场放开优先级、记一条事件。
@@ -59,13 +78,18 @@ class DeterDesk:
             buttons(pressed)
 
     def _sound_ended(self, ok: bool, why: str) -> None:
+        if self._sound is not None and self._sound_gen != self._started_gen:
+            # 外审 1.1 第 5 轮 #3:放完的是旧的一段,后来接受的那条还没起播:它的优先级照样占着
+            log.info("旧的一段放完了(%s);后来接受的喇叭指令还没起播,优先级不放开", why)
+            return
         self._sound = None
         self._emit("deter", {"output": "speaker", "on": False,
                              "ended": "done" if ok else "failed", "reason": why[:200]})
 
     def outputs(self) -> list[str]:
         acts = self.hal.hal_capabilities().actuators
-        return [o for o in OUTPUTS if acts.get(o)]
+        # 1.1-4:听回话要 HAL 能录(``mic``)、还要能传回站点
+        return [o for o in OUTPUTS if acts.get(o) and (o != "mic" or self.talk is not None)]
 
     def caps(self) -> dict[str, Any] | None:
         """``capabilities.tasks.deter``:接了哪几路、喇叭能放哪些话术、能不能 TTS。
@@ -84,6 +108,7 @@ class DeterDesk:
             got = langs() if callable(langs) else None
             if got is not None:
                 d["tts_langs"] = [str(x) for x in got]
+            d["talk"] = self.talk is not None             # 1.1-4:能放按住说话录的那一段
         return d
 
     def options(self) -> dict[str, Any]:
@@ -129,12 +154,14 @@ class DeterDesk:
             cur = self.playing()
             if cur is not None and cur[0] >= priority:
                 return False
+            self._speak_gen += 1
             try:
-                await self.hal.sound(clip, max_s)
+                await self._hal_sound(clip, max_s, self._speak_gen)
             except Exception as exc:                 # noqa: BLE001 - 自己放的没放成:记日志,不打断别的
                 log.warning("自动放 %s 没放成: %s", clip, exc)
                 return False
             self._sound = (priority, self._mono() + max_s)
+            self._sound_gen = self._speak_gen
         self._emit("deter", {"output": "speaker", "on": True, "max_s": max_s, "clip": clip,
                              "priority": priority, "auto": why})
         return True
@@ -185,7 +212,15 @@ class DeterDesk:
         """喇叭:``SPEAK_ACK_S`` 内做完(或当场出错)照常;没做完 —— 合成、连竞品主控、ssh 慢 —— 先回执
         收下,后台接着做,后台没做成发 ``ended: failed``(站点出「喊话没放出来」)。
         真机 11-20:喊话回执超过 10 s,站点等不到回 504,人以为没发出去。"""
-        t = asyncio.ensure_future(self.hal.sound(req.clip if req.on else "", req.max_s))
+        gen = self._speak_gen
+        self._prep_until = prep = self._mono() + PREP_S
+        if req.on and req.clip.startswith("talk:"):
+            if self.talk is None:
+                raise HalUnsupported("这台机器人放不了站点的录音(没接机器人专用口)")
+            t = asyncio.ensure_future(self._talk_play(req, gen, prep))  # 1.1-4:先拉下来
+        else:
+            t = asyncio.ensure_future(self._hal_sound(req.clip if req.on else "", req.max_s, gen,
+                                                      prep if req.on else None))
         try:
             await asyncio.wait_for(asyncio.shield(t), SPEAK_ACK_S)
             return
@@ -197,17 +232,86 @@ class DeterDesk:
             if f.cancelled() or f.exception() is None:
                 return
             log.warning("喊话后台没做成: %s", f.exception())
+            if gen != self._speak_gen:
+                # 外审 1.1 第 2 轮 #10:后来又有喇叭指令(可能优先级更高、正在放):不动它的状态
+                return
             if req.on:
                 self._sound = None
             self._emit("deter", {"task_id": cmd.task_id, "output": "speaker", "on": False,
                                  "ended": "failed", "reason": str(f.exception())[:200]})
         t.add_done_callback(done)
 
+    async def _talk_play(self, req: Any, gen: int, prep: float) -> None:
+        path = await self.talk.fetch(req.clip)
+        if gen != self._speak_gen:
+            # 下载期间有人关了喇叭、放了别的(可能优先级更高):这段不放了。检查和起播之间没有 await
+            log.info("录音 %s 下完时已经被后来的喇叭指令取代,不放", req.clip)
+            return
+        await self._hal_sound(f"talk:{path}", req.max_s, gen, prep)
+
+    async def _hal_sound(self, clip: str, max_s: float, gen: int,
+                         prep: float | None = None) -> None:
+        """叫 HAL 放 / 关(排队);排到时已经有更新的喇叭指令就不做。
+
+        ``prep``:外审 1.1 第 12 轮 —— 准备到这个时刻(单调钟)还没轮到起播就不放了(抛错,
+        后台回调报 ``ended: failed``、放开优先级);起播了从起播时刻重算放到几点。"""
+        async with self._hal_lock:
+            if gen != self._speak_gen:
+                log.info("喇叭指令 %r 排到时已被后来的指令取代,不做", clip or "关")
+                return
+            if prep is None:
+                await self.hal.sound(clip, max_s)
+            else:
+                await self._sound_by(clip, max_s, prep)
+            self._started_gen = gen
+            if clip and self._sound is not None and self._sound_gen == gen:
+                self._sound = (self._sound[0], self._mono() + max_s)
+
+    async def _sound_by(self, clip: str, max_s: float, prep: float) -> None:
+        """外审 1.1 第 13 轮 #1:HAL 起播(等功放、起播放器、连竞品主控)也算进准备的截止时间 ——
+        到点还没起来就取消、再叫一次关喇叭清掉可能半起来的,抛错(后台回调报 failed、放开优先级)。
+        按单调钟(``monotonic``)每 0.1 秒看一次,跟优先级用的是同一个钟。"""
+        if self._mono() > prep:
+            raise RuntimeError(f"准备超过 {PREP_S:g} 秒还没起播,不放了")
+        t = asyncio.ensure_future(self.hal.sound(clip, max_s))
+        while not t.done():
+            try:
+                await asyncio.wait({t}, timeout=0.1)
+            except asyncio.CancelledError:
+                t.cancel()                           # 自己被取消:起播也一起取消
+                raise
+            if not t.done() and self._mono() > prep:
+                t.cancel()
+                await asyncio.wait({t})              # 等它真退出(不往外抛它的取消)
+                if not t.cancelled() and t.exception() is not None:
+                    log.info("准备超时取消起播时它出错了: %s", t.exception())
+                try:
+                    await self.hal.sound("", 0)
+                except Exception:                    # 关不掉也照样报没放成
+                    log.exception("准备超时后关喇叭没成")
+                raise RuntimeError(f"准备超过 {PREP_S:g} 秒还没起播,不放了")
+        t.result()
+
+    async def _listen(self, cmd: Command, req: Any) -> None:
+        """1.1-4 听回话:录 ``max_s`` 秒、传回站点;成没成都记一条 ``deter`` 事件。"""
+        try:
+            data = await self.hal.record(req.max_s)
+            await self.talk.upload(req.clip, data)
+        except Exception as exc:                     # noqa: BLE001 - 录不了、传不上:告诉站点
+            log.warning("听回话没成: %s", exc)
+            self._emit("deter", {"task_id": cmd.task_id, "output": "mic", "on": False,
+                                 "ended": "failed", "reason": str(exc)[:200], "clip": req.clip})
+            return
+        self._emit("deter", {"task_id": cmd.task_id, "output": "mic", "on": False,
+                             "ended": "done", "clip": req.clip})
+
     async def _do(self, cmd: Command, req: Any) -> str:
         if req.output == "speaker" and req.on:
             cur = self.playing()
             if cur is not None and req.priority < cur[0]:
                 return "busy"
+        if req.output == "speaker":
+            self._speak_gen += 1
         try:
             if req.output == "strobe":
                 await self.hal.strobe(req.color or "warn", "flash" if req.on else "off",
@@ -224,6 +328,10 @@ class DeterDesk:
                 await self.hal.ptz(req.pan, req.tilt)
             elif req.output == "light":
                 await self._light(req.side, req.on, req.max_s)
+            elif req.output == "mic":
+                if not req.on:
+                    return ""
+                self._listening = asyncio.ensure_future(self._listen(cmd, req))
             else:
                 await self._sound_now(cmd, req)
         except HalUnsupported:
@@ -232,7 +340,14 @@ class DeterDesk:
             log.warning("上装 %s 没做成: %s", req.output, exc)
             return f"device: {str(exc)[:200]}"
         if req.output == "speaker":
-            self._sound = (req.priority, self._mono() + req.max_s) if req.on else None
+            if not req.on:
+                self._sound = None
+            elif self._started_gen == self._speak_gen:      # 已经起播了:从现在放 max_s
+                self._sound = (req.priority, self._mono() + req.max_s)
+            else:
+                # 外审 1.1 第 12 轮:还在准备(下载、转码…):占到准备截止 + 播放时长,起播时重算
+                self._sound = (req.priority, self._prep_until + req.max_s)
+            self._sound_gen = self._speak_gen
         data: dict[str, Any] = {"task_id": cmd.task_id, "output": req.output, "on": req.on}
         if req.output == "ptz":
             data |= {"pan": req.pan, "tilt": req.tilt}
@@ -242,6 +357,8 @@ class DeterDesk:
             data["side"] = req.side
         if req.color:
             data["color"] = req.color
+        if req.output == "mic" and req.on:
+            data["clip"] = req.clip
         if req.output == "speaker" and req.on:
             data |= {"clip": req.clip[:64] if not req.clip.startswith("tts:") else "tts",
                      "priority": req.priority}

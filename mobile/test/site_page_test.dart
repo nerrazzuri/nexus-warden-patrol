@@ -19,6 +19,7 @@ import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:nexwar_patrol/ui/widget/live_video.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nexwar_patrol/ui/face_enrol.dart';
 
 import 'support/fake_site.dart';
 import 'support/shell_nav.dart';
@@ -426,6 +427,38 @@ class FakeApi implements SiteApi {
   }
   /// 上装（W21）：记在 [calls] 里；[deterAck] 是狗回的回执。
   Map<String, dynamic> deterAck = <String, dynamic>{'result': 'accepted'};
+  /// 1.1-5 值班簿：[obList] 是站点回的一本；写的记在 [calls]。
+  List<Map<String, dynamic>> obList = <Map<String, dynamic>>[];
+  @override
+  Future<List<Map<String, dynamic>>> occurrenceBook(int since, int until) async => obList;
+  @override
+  Future<Map<String, dynamic>> addOccurrence(String category, String text, {int? atMs, int? corrects, String? alert}) async {
+    calls.add('ob $category $text ${atMs ?? '-'} ${corrects ?? '-'} ${alert ?? '-'}');
+    return <String, dynamic>{'id': 99, 'category': category, 'text': text};
+  }
+  @override
+  Future<Uint8List> incidentReport(String alertKey) async {
+    calls.add('report $alertKey');
+    return Uint8List.fromList(utf8.encode('<!doctype html><title>r</title>'));
+  }
+  /// 1.1-4 按住说话：传上来的录音（字节数、格式）；最近的对讲。
+  final List<(int, String)> talked = <(int, String)>[];
+  List<Map<String, dynamic>> talkList = <Map<String, dynamic>>[];
+  @override
+  Future<Map<String, dynamic>> talk(String robotId, Uint8List audio, String mime) async {
+    talked.add((audio.length, mime));
+    calls.add('talk $robotId');
+    return <String, dynamic>{'ack': deterAck, 'talk': <String, dynamic>{'id': '0123456789abcdef'}};
+  }
+  @override
+  Future<Map<String, dynamic>> listen(String robotId, {int seconds = 10}) async {
+    calls.add('listen $robotId $seconds');
+    return <String, dynamic>{'ack': deterAck, 'talk': <String, dynamic>{'id': 'fedcba9876543210'}};
+  }
+  @override
+  Future<List<Map<String, dynamic>>> talks(String robotId) async => talkList;
+  @override
+  Future<Uint8List> talkAudio(String id) async => Uint8List.fromList(const [82, 73, 70, 70]);
   /// 常用喊话（第三档 #41）；null = 老站点没有这个接口（抛错）。
   List<Map<String, String>>? voicePresetList = <Map<String, String>>[];
   @override
@@ -1040,6 +1073,32 @@ class FakeApi implements SiteApi {
   Future<void> changeOwnPassword(String oldPassword, String newPassword) async {
     calls.add('password $oldPassword $newPassword');
     if (passwordError != null) throw passwordError!;
+  }
+
+  // 1.1-1：人脸登记
+  Map<String, dynamic> faces = <String, dynamic>{'photos': 0, 'max_photos': 5, 'engine': true};
+  SiteError? faceError;
+  @override
+  Future<Map<String, dynamic>> myFaces() async => faces;
+  @override
+  Future<Map<String, dynamic>> addFacePhoto(String jpegB64) async {
+    calls.add('face-photo ${jpegB64.length}');
+    if (faceError != null) throw faceError!;
+    return faces = <String, dynamic>{...faces, 'photos': (faces['photos'] as int) + 1};
+  }
+
+  @override
+  Future<Map<String, dynamic>> removeMyFaces() async {
+    calls.add('face-remove');
+    passList = <Map<String, dynamic>>[];
+    return faces = <String, dynamic>{...faces, 'photos': 0};
+  }
+
+  List<Map<String, dynamic>> passList = <Map<String, dynamic>>[];
+  @override
+  Future<List<Map<String, dynamic>>> guardPasses(int since, int until) async {
+    calls.add('passes ${until - since}');
+    return passList;
   }
 
   @override
@@ -1693,6 +1752,86 @@ void main() {
     expect(find.textContaining('留在原地'), findsOneWidget);
     final due = (v['standby_countdown'] as Map)['due_ms'] as int;
     expect(returnCountdownS(v, now: DateTime.fromMillisecondsSinceEpoch(due - 9100)), 10);
+  });
+
+  testWidgets('1.1-1 人脸登记：本人勾同意才能拍；拍坏了说原因；能删掉', (t) async {
+    final api = FakeApi('guard');
+    var shots = 0;
+    await t.pumpWidget(MaterialApp(home: FaceEnrolPage(api: api, take: () async {
+      shots++;
+      return Uint8List.fromList(<int>[1, 2, 3]);
+    })));
+    await t.pumpAndSettle();
+    expect(find.textContaining('0 / 5'), findsOneWidget);
+    await t.tap(find.byKey(FaceEnrolPage.takeKey));
+    await t.pumpAndSettle();
+    expect(shots, 0, reason: '没勾同意不能拍');
+    await t.tap(find.byKey(FaceEnrolPage.consentKey));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(FaceEnrolPage.takeKey));
+    await t.pumpAndSettle();
+    expect(shots, 1);
+    expect(api.calls, contains('face-photo 4'));
+    expect(find.textContaining('1 / 5'), findsOneWidget);
+    expect(find.textContaining('再拍 2 张'), findsOneWidget);
+    api.faceError = const SiteError(400, '脸太小:手机拿近一点再拍');
+    await t.tap(find.byKey(FaceEnrolPage.takeKey));
+    await t.pumpAndSettle();
+    expect(find.textContaining('没登记上'), findsOneWidget);
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeKey));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('face-remove'));
+    expect(find.textContaining('0 / 5'), findsOneWidget);
+  });
+
+  testWidgets('1.1-1 第 4 步：人脸登记页列最近 7 天机器人认出我的记录；删了人脸资料一起没了', (t) async {
+    final api = FakeApi('guard')
+      ..faces = <String, dynamic>{'photos': 2, 'max_photos': 5, 'engine': true}
+      ..passList = <Map<String, dynamic>>[
+        <String, dynamic>{'id': 1, 'account': 'gina', 'robot': 'A', 'zone': 'B区', 'how': 'face',
+          'first_ms': DateTime(2026, 11, 28, 9, 5).millisecondsSinceEpoch, 'last_ms': 0, 'n': 3},
+      ];
+    await t.pumpWidget(MaterialApp(home: FaceEnrolPage(api: api, take: () async => null)));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('passes ${7 * 86400000 + 60000}'));
+    await t.ensureVisible(find.byKey(FaceEnrolPage.passesKey));
+    expect(find.text('11-28 09:05  gina  B区 · A  ×3'), findsOneWidget);
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeKey));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.pumpAndSettle();
+    expect(find.textContaining('B区 · A'), findsNothing);
+    expect(find.textContaining('认出记录已经从站点上删掉了'), findsOneWidget);
+  });
+
+  testWidgets('1.1-1 人脸登记：站点没装人脸模块 —— 说清楚，没有拍照按钮', (t) async {
+    final api = FakeApi('guard')..faces = <String, dynamic>{'photos': 0, 'max_photos': 5, 'engine': false};
+    await t.pumpWidget(MaterialApp(home: FaceEnrolPage(api: api, take: () async => null)));
+    await t.pumpAndSettle();
+    expect(find.textContaining('没装人脸识别模块'), findsOneWidget);
+    expect(find.byKey(FaceEnrolPage.takeKey), findsNothing);
+  });
+
+  testWidgets('外审 1.1 第 5 轮 #5：人脸模块坏了、已有登记 —— 照样能删掉（撤销同意），只是不能再拍', (t) async {
+    final api = FakeApi('guard')..faces = <String, dynamic>{'photos': 2, 'max_photos': 5, 'engine': false};
+    await t.pumpWidget(MaterialApp(home: FaceEnrolPage(api: api, take: () async => null)));
+    await t.pumpAndSettle();
+    expect(find.textContaining('没装人脸识别模块'), findsOneWidget);
+    expect(find.byKey(FaceEnrolPage.takeKey), findsNothing);
+    expect(find.textContaining('2 / 5'), findsOneWidget);
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeKey));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('face-remove'));
   });
 
   testWidgets('真机 11-25：有喇叭的机器人有「静音」，静音着变「取消静音」', (t) async {

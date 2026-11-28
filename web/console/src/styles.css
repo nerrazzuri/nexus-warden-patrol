@@ -1136,6 +1136,13 @@ img.cam-live { width: 100%; max-height: 60vh; object-fit: contain; background: #
 .sys-row > .muted { min-width: 140px; }
 .sys-row.bad b { color: var(--c-error); }
 .sys-row.warn b { color: var(--c-warning); }
+/* 1.1-2 告警渠道 */
+.sys-notify td.bad { color: var(--c-error); }
+.sys-notify .sp-table { margin-bottom: var(--sp-3); }
+.nt-form { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) 0; border-top: 1px solid var(--c-outline); }
+.nt-form .field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.nt-form .field input, .nt-form .field select { min-height: 40px; }
+@media (max-width: 760px) { .sys-notify .sp-table { display: block; overflow-x: auto; } }
 .up-rel { display: flex; flex-direction: column; gap: var(--sp-2); padding: 8px 0; border-bottom: 1px solid var(--c-outline); }
 .up-robot { display: inline-flex; gap: var(--sp-1); align-items: center; margin-right: 12px; }
 
@@ -2112,6 +2119,16 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .rc-say { display: grid; grid-template-columns: 120px minmax(0, 1fr) 96px 96px; gap: var(--sp-2); }
 .rc-say .btn { justify-content: center; }
 .rc-deter-body { flex-direction: row; flex-wrap: wrap; }
+/* 1.1-4 远程喊话 */
+.tk { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.tk-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.tk-hold { min-width: 200px; min-height: 48px; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+.tk-hold.is-rec { color: var(--c-error); border: 1px solid var(--c-error); background: var(--c-errorSoft); }
+.tk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.tk-list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); min-width: 0; }
+.tk-who { font-weight: 600; }
+.tk-list audio { height: 32px; max-width: 100%; }
+@media (max-width: 760px) { .tk-hold { flex: 1 1 100%; } }
 .rc-deter-body .btn, .rc-deter-body select { min-width: 112px; justify-content: center; }
 .rc-side { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 .rc-side > .rc-sec:first-child { border-top: 0; }
@@ -2246,6 +2263,27 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 /* 交班留言 */
 .notes-write .btn { align-self: flex-start; min-width: 128px; justify-content: center; }
 .notes-main { padding-bottom: 16px; }
+/* 1.1-5 值班簿 */
+.ob-write select, .ob-write input { min-height: 40px; }
+.ob-fixing { display: flex; gap: var(--sp-2); align-items: baseline; margin: 0; font-weight: 600; }
+.ob-head { display: flex; flex-wrap: wrap; gap: var(--sp-3); justify-content: space-between; align-items: flex-end; }
+.ob-tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.ob-tools input[type=date] { min-height: 36px; }
+.gp-tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; margin-bottom: var(--sp-2); }
+.gp-tools input[type=date], .gp-tools select { min-height: 36px; }
+.ob-table { width: 100%; border-collapse: collapse; }
+.ob-table th, .ob-table td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--c-outline); }
+.ob-table th { font-size: 13px; color: var(--c-textSecondary); font-weight: 600; }
+.ob-table td.mono { white-space: nowrap; }
+.ob-table tr.ob-auto td { color: var(--c-textSecondary); }
+.ob-table tr.ob-fixed .ob-text { text-decoration: line-through; color: var(--c-textSecondary); }
+.ob-table .ob-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .ob-table thead { display: none; }
+  .ob-table tr { display: grid; grid-template-columns: auto auto 1fr; gap: 2px var(--sp-2); padding: 8px 0; border-bottom: 1px solid var(--c-outline); }
+  .ob-table td { border: 0; padding: 0 4px; }
+  .ob-table td:nth-child(4) { grid-column: 1 / -1; }
+}
 .notes-list { list-style: none; margin: 0; padding: 0; }
 .notes-list li { padding: 12px 16px; border-bottom: 1px solid var(--c-outline); max-width: 920px; }
 .notes-list header { display: flex; gap: var(--sp-3); align-items: baseline; }

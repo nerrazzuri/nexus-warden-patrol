@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import '../l10n.dart';
 import '../net/site_client.dart';
 import 'nw/nw_theme.dart';
+import 'site_talk.dart';
 
 class SiteDeterPage extends StatefulWidget {
   final SiteApi api;
@@ -52,6 +53,7 @@ Map<String, (String, double)> get deterOutputs => <String, (String, double)>{
       'speaker': (tr('Speaker', '喇叭'), 30),
       'wiper': (tr('Wiper', '雨刷'), 10), // POC 11-06 竞品上装：刷可见光镜头
       'light': (tr('Robot lights', '机器人灯光'), 600), // 真机 11-20：路线开的本体灯要能关
+      'mic': (tr('Microphone', '麦克风'), 10), // 1.1-4 听回话（不单列一行，在喊话那一块）
     };
 
 /// App V2 机器人控制页的一块：标题、一句说明、内容；上面一道分隔线。
@@ -220,7 +222,7 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
 
   /// 喇叭以外的每一行。聚光灯分左右的：「两边」一行，再加左、右各一行。
   List<_Row> get _rows => <_Row>[
-        for (final o in _outputs.where((o) => o != 'speaker' && o != 'ptz')) ...[
+        for (final o in _outputs.where((o) => o != 'speaker' && o != 'ptz' && o != 'mic')) ...[
           (key: o, output: o, side: null, name: deterOutputs[o]?.$1 ?? o),
           if (o == 'spotlight' && _sides.contains('left'))
             (key: 'spotlight-left', output: o, side: 'left', name: tr('Left spotlight', '左聚光灯')),
@@ -464,7 +466,12 @@ class _SiteDeterPageState extends State<SiteDeterPage> {
             ]),
             const SizedBox(height: Nw.s8),
           ],
-          if (_clips.isEmpty && !tts)
+          // 1.1-4 远程喊话：按住说话、听回话
+          if (widget.caps['talk'] == true) ...[
+            SiteTalk(api: widget.api, robotId: widget.robotId, listen: outs.contains('mic')),
+            const SizedBox(height: Nw.s8),
+          ],
+          if (_clips.isEmpty && !tts && widget.caps['talk'] != true)
             Padding(
                 padding: const EdgeInsets.only(bottom: Nw.s8),
                 child: Text(tr('No recorded clips on the robot', '机器人上没有预录话术'),

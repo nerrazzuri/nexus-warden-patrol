@@ -17,6 +17,7 @@ import { MapCanvas } from "./mapcanvas";
 import { type PreviewMeta } from "./mapview";
 import { recentActivity } from "./shifttl";
 import { notAccepted, type CommandReply } from "./posepick";
+import { TalkPanel } from "./talkpanel";
 import { CLIP_KEY, langName, POSTURE_KEY, PresetEditor, STROBE_S, taskWhat, type Posture, type RobotCard, type VoicePreset } from "./robotspage";
 import { pageAllowed } from "./shell";
 import { Sign, stateSign } from "./signs";
@@ -316,10 +317,11 @@ export function cardFromUnit(u: UnitInfo): RobotCard {
     home_bad?: boolean; standby_bad?: boolean };
   const tasks = (rb.capabilities?.tasks ?? {}) as Record<string, unknown>;
   const fresh = u.state !== "offline";
-  const d = tasks.deter as { outputs?: unknown[]; max_s?: number; tts?: boolean; clips?: unknown[]; tts_langs?: unknown[] } | undefined;
+  const d = tasks.deter as { outputs?: unknown[]; max_s?: number; tts?: boolean; clips?: unknown[]; tts_langs?: unknown[]; talk?: boolean } | undefined;
   const deter = fresh && d && Array.isArray(d.outputs) && d.outputs.length > 0
     ? { outputs: d.outputs.map(String), max_s: Number(d.max_s ?? 600), tts: !!d.tts, clips: (d.clips ?? []).map(String),
-      ...(Array.isArray(d.tts_langs) ? { tts_langs: d.tts_langs.map(String) } : {}) } : null;
+      ...(Array.isArray(d.tts_langs) ? { tts_langs: d.tts_langs.map(String) } : {}),
+      ...(d.talk ? { talk: true } : {}) } : null;
   const modes = (tasks.posture as { modes?: unknown[] } | undefined)?.modes;
   return {
     robot_id: rb.robot_id, name: rb.name ?? "", revoked: rb.revoked, expires_at: 0, battery_pct: u.battery,
@@ -468,6 +470,8 @@ function Voice({ r, name, busy, off, send, post, admin, say }: {
                   onClick={() => void send(deter({ output: "speaker", on: false }), t("rdSpeakStopped", { id: name }))}>{t("rdSpeakStop")}</button>
               </form>
             )}
+            {/* 1.1-4 远程喊话:按住说话、听回话 */}
+            {d.talk && <TalkPanel robot={r.robot_id} name={name} listen={d.outputs.includes("mic")} disabled={dis} say={say} />}
             {/* 外审 1 #5:不会 TTS 的机器人放录好的话也要能停 */}
             {!tts && d.clips.length > 0 && (
               <div class="rc-row"><button type="button" class="btn" data-speak-stop="1" disabled={dis}

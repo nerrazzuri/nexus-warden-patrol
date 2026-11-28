@@ -812,6 +812,34 @@ class SiteAlertSources:
             # W72:凉下来了,「温度偏高 / 降负载」只留记录;「严重过热」(机器人结束了任务回去)
             # 多半是风扇坏了、进风口堵了,人去看过再关
             self.desk.resolve_all(rid, "board_hot", who="site:board_ok")
+        elif e.kind == "thermal_hot":
+            # 1.1-6:热像量到起火线 → P1(保安的「起火、过热」);高温线 → P2。人看过画面再关
+            c, lvl = d.get("max_c", "?"), d.get("level")
+            if lvl == "fire":
+                self.desk.raise_alert(
+                    kind="thermal_fire", robot=rid, title=f"热像发现疑似起火({c} °C)",
+                    detail=f"热像最高温度 {c} °C,过了起火线 {d.get('fire_c', '?')} °C;"
+                           "马上看热像画面,真起火按消防流程报警、叫人,不要等机器人",
+                    context={"max_c": c, "fire_c": d.get("fire_c")})
+            else:
+                self.desk.raise_alert(
+                    kind="thermal_overheat", robot=rid, title=f"热像发现高温点({c} °C)",
+                    detail=f"热像最高温度 {c} °C,过了高温线 {d.get('hot_c', '?')} °C;看热像画面,"
+                           "派人去看是什么在发热(电箱、机器、明火)",
+                    context={"max_c": c, "hot_c": d.get("hot_c")})
+        elif e.kind == "thermal_normal":
+            # 1.1-6:温度降回去了 —— 不自己关(起火、过热要人看过),现场记一笔
+            for kind in ("thermal_fire", "thermal_overheat"):
+                self.desk.amend_open(rid, kind, context={"cooled_c": d.get("max_c"),
+                                                         "peak_c": d.get("peak_c"),
+                                                         "cooled_ms": self._now()})
+        elif e.kind == "thermometry_failed":
+            self.desk.raise_alert(kind="thermometry_failed", robot=rid,
+                                  title="热像量不了温度,看不出起火、过热",
+                                  detail=f"{str(d.get('reason', ''))[:200]};"
+                                         "看热像网页上的全画面测温规则、账号口令(跟录像那一路同一套)")
+        elif e.kind == "thermometry_ok":
+            self.desk.resolve_all(rid, "thermometry_failed", who="site:thermometry_ok")
         elif e.kind == "thermal_lens_clear":
             self.desk.resolve_all(rid, "lens_blocked", who="site:lens_clear")      # W72
         elif e.kind == "recording_ok":
@@ -1140,13 +1168,17 @@ class SiteAlertSources:
                 self._sched_entries.pop(a.key, None)
                 self.desk.resolve(a.key, who="site:schedule", note=note)
 
-    def on_incident(self, row: dict) -> None:
+    def on_incident(self, row: dict) -> str | None:
         """一条入侵有了去向(W16):派出去了、并进已出动的,说「有入侵、谁去了」(记在那只狗名下);没狗、
         防区没映射、派失败,说「有入侵、没狗去」(记在站点名下)。都是 P1:要人动身。同一只狗(或站点)
         同一个 kind 合成一条,标题列上合进来的每个防区(同排程)。"""
         zone = str(row.get("zone") or "?")
         outcome = row.get("outcome")
-        if outcome in ("dispatched", "merged") and row.get("robot_id"):
+        if outcome in ("dispatched", "merged") and row.get("robot_id") and row.get("verify"):
+            # 1.1-3:报警器报的、设备勾了「先核实」:先报 P2「去核实」,机器人看见人才是 P1
+            kind, robot = "intrusion_verifying", str(row["robot_id"])
+            what = f"{robot} 去核实"
+        elif outcome in ("dispatched", "merged") and row.get("robot_id"):
             kind, robot = "intrusion", str(row["robot_id"])
             what = f"{robot} 已出动去 {row.get('intercept') or '拦截点'}"
             if self.weather is not None and self.weather.storm():
@@ -1163,6 +1195,7 @@ class SiteAlertSources:
             zones.append(zone)
         names = "、".join(zones[:5]) + (f" 等 {len(zones)} 个防区" if len(zones) > 5 else "")
         title = (f"防区 {names} 有入侵:{what}" if kind == "intrusion"
+                 else f"防区 {names} 报警器报警:{what}" if kind == "intrusion_verifying"
                  else f"防区 {names} 有入侵,无机器人去:{what}")
         # 给保安看的说明(演示站点实测记下):谁报的、怎么回事,不写事件源编号、事件类型这些技术用语
         src = str(row.get("source") or "?")
@@ -1171,13 +1204,94 @@ class SiteAlertSources:
         ctx: dict = {"zone": zone}
         if row.get("intercept_pose"):
             ctx["intercept"] = row["intercept_pose"]
-        if kind == "intrusion" and row.get("task_id"):
+        if kind in ("intrusion", "intrusion_verifying") and row.get("task_id"):
             ctx["task_id"] = row["task_id"]                # 到了拍的照片在这一趟的记录里
         a = self.desk.raise_alert(kind=kind, robot=robot, title=title[:200], detail=detail[:300],
                                   context=ctx)
         self._incident_zones[a.key] = zones
         while len(self._incident_zones) > 200:
             self._incident_zones.pop(next(iter(self._incident_zones)))
+        # 外审 1.1 第 2、3 轮 #3 #5:「去核实」合进了哪条告警,报警派遣那头记在这条报警上
+        return a.key if kind == "intrusion_verifying" else None
+
+    def on_verdict(self, row: dict) -> None:
+        """1.1-3:「去核实」那条有了结论 —— 看见人了(P1 已经由「机器人看见人」报了)、
+        到了没看见人,关掉 P2 并写明;没到现场(没核实成)另报 P1「有入侵,无机器人去」叫人。"""
+        robot, verdict = str(row.get("robot_id") or ""), row.get("verdict")
+        zone = str(row.get("zone") or "?")
+        note = {"person": "核实:机器人看见人了,已报 P1「机器人看见人」",
+                "clear": "核实:机器人到了现场,没看见人(照片在这一趟的记录里)",
+                "unverified": "没核实成:机器人没到现场,已报 P1 叫人"}.get(str(verdict), "")
+        why = str(row.get("why") or "")
+        if verdict == "unverified" and why:
+            note = f"没核实成:{why},已报 P1 叫人"
+        if verdict == "unverified":
+            self.desk.raise_alert(kind="intrusion_unanswered", robot=SITE,
+                                  title=f"防区 {zone} 报警器报警,无机器人去:"
+                                        + (f"{why},没核实成" if why else "机器人没到现场,没核实成"),
+                                  detail=(f"{robot}:{why}" if why else
+                                          f"{robot} 没到 {row.get('intercept') or '查看点'}")[:300],
+                                  context={"zone": zone})
+        this = int(row.get("id") or 0)
+        for a in self.desk.book.open():
+            if a.kind != "intrusion_verifying" or a.robot != robot:
+                continue
+            members = self._members(a.key)
+            if members and this not in members:
+                continue                                 # 不是这条告警合进来的报警
+            # 外审 1.1 #9:这台机器人的「去核实」可能合了好几条报警(同一机器人同一种并成一条)。
+            # 还有别的没下结论:先不关,只记一笔;都下了才关;其中有看见人、没核实成的不算误报
+            pending, bad = self._verify_group(robot, a.first_ms, this, members)
+            if pending:
+                self.desk.amend(a.key, context={"verify_note": note})
+                continue
+            clear = verdict == "clear" and not bad
+            self.desk.resolve(a.key, who="site:verify",
+                              verdict="false_alarm" if clear else "", note=note)
+
+    def on_verify_moved(self, keys: list[str]) -> None:
+        """外审 1.1 第 4 轮 #2:首条派失败,并进来的报警改派别的机器人(或不派了):原来那台的「去核实」
+        告警没有报警挂着了就关掉(改派的按新机器人另报一条)。"""
+        for k in keys:
+            if self._members(k):
+                continue
+            a = self.desk.book.get(k)
+            if a is not None and a.resolved_ms is None:
+                self.desk.resolve(k, who="site:verify",
+                                  note="这台机器人没接单:报警已改派或不再派,这条作废")
+
+    def _members(self, key: str) -> list[int]:
+        """合进这条「去核实」告警的报警(老告警没记的回空)。"""
+        db = getattr(self.desk, "db", None)
+        if db is None:
+            return []
+        return [int(r["id"]) for r in db.query("SELECT id FROM incidents WHERE verify_alert=?",
+                                                (key,))]
+
+    def _verify_group(self, robot: str, since: int, this: int,
+                      members: list[int] | None = None) -> tuple[int, int]:
+        """这条告警合进来的「先核实」报警(``members``;老告警没记,按这台机器人从 ``since`` 起的算):
+        还没下结论的几条、结论是有人 / 没核实成的几条(不算 ``this`` 这条)。
+        站点没有报警事件表(测试)回 (0, 0)。"""
+        db = getattr(self.desk, "db", None)
+        if db is None:
+            return 0, 0
+        if not db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='incidents'"):
+            return 0, 0                              # 没有报警事件表(测试):按没有别的算
+        if members:
+            others = [i for i in members if i != this]
+            if not others:
+                return 0, 0
+            rows = db.query(f"SELECT verdict FROM incidents WHERE id IN "
+                            f"({','.join('?' * len(others))})", tuple(others))
+            return (sum(1 for r in rows if not r["verdict"]),
+                    sum(1 for r in rows if r["verdict"] in ("person", "unverified")))
+        q = ("SELECT i.verdict FROM incidents i LEFT JOIN incidents l ON l.id=i.merged_into "
+             "WHERE i.verify=1 AND i.id<>? AND i.received_at>=? "
+             "AND i.outcome IN ('dispatched', 'merged') AND COALESCE(l.robot_id, i.robot_id)=?")
+        rows = db.query(q, (this, since, robot))
+        return (sum(1 for r in rows if not r["verdict"]),
+                sum(1 for r in rows if r["verdict"] in ("person", "unverified")))
 
     def on_incident_throttled(self, source: str) -> None:
         """事件源一分钟超了上限被限流(W16):摄像头抽风,或者密钥漏了被人刷。"""

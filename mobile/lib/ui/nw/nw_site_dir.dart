@@ -12,6 +12,7 @@ import '../../l10n.dart';
 import '../../net/site_client.dart';
 import '../../store/site_store.dart';
 import '../alarm_log.dart';
+import '../face_enrol.dart';
 import '../app_settings.dart' show openSettings;
 import '../guide.dart';
 import '../map_manage.dart';
@@ -21,13 +22,14 @@ import '../site_incidents.dart';
 import '../site_mode.dart';
 import '../site_recordings.dart';
 import '../site_releases.dart';
+import '../site_ob.dart';
 import '../site_runs.dart';
 import '../site_tabs.dart' show AccountsPage, leaveConfirmKey;
 import 'nw_layout_hub.dart';
 import 'nw_theme.dart';
 
 /// 目录里一行要去哪。
-enum SiteDest { overview, robots, users, layout, arming, alarms, events, recordings, runs, notes, maps, health, updates, settings, help, report }
+enum SiteDest { overview, robots, users, layout, arming, alarms, events, recordings, runs, notes, ob, maps, health, updates, settings, help, report }
 
 class SiteDirectory extends StatelessWidget {
   final SiteApi api;
@@ -47,6 +49,7 @@ class SiteDirectory extends StatelessWidget {
   static Key itemKey(SiteDest d) => Key('site-${d.name}');
   static const Key leaveKey = Key('site-leave');
   static const Key passwordKey = Key('site-password');
+  static const Key facesKey = Key('site-faces');
 
   void _push(BuildContext context, Widget page) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
@@ -115,6 +118,10 @@ class SiteDirectory extends StatelessWidget {
       if (!readOnly)
         _Row(SiteDest.notes, Icons.sticky_note_2_outlined, tr('Handover notes', '交班留言'), tr('Latest note and history', '最近一条和历史'),
             () => _push(context, ShiftNotesPage(api: api))),
+      // 1.1-5 电子值班簿：只读账号也能看
+      _Row(SiteDest.ob, Icons.menu_book_outlined, tr('Occurrence book', '值班簿'),
+          readOnly ? tr('View only', '只看') : tr('Write entries; alarms and patrols added by the site', '自己写的，加上站点记的报警、巡检'),
+          () => _push(context, OccurrenceBookPage(api: api))),
     ]));
     if (manage) {
       groups.add((tr('Advanced', '高级'), [
@@ -186,6 +193,11 @@ class _AccountBlockState extends State<_AccountBlock> {
           Divider(height: 1, thickness: 1, color: c.outline),
           row(SiteDirectory.passwordKey, tr('Change password', '改密码'), null,
               () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ChangePasswordPage(api: widget.api)))),
+          Divider(height: 1, thickness: 1, color: c.outline),
+          // 1.1-1：登记自己的脸，机器人巡逻时认得出是工作人员
+          row(SiteDirectory.facesKey, tr('Face enrolment', '人脸登记'),
+              tr('So the robot recognises you as staff', '让机器人认得你是工作人员'),
+              () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => FaceEnrolPage(api: widget.api)))),
           Divider(height: 1, thickness: 1, color: c.outline),
           row(SiteDirectory.leaveKey, tr('Leave site', '退出站点'),
               tr("Return to the site list; this phone stops receiving this site's alerts", '回到站点列表；这台手机不再收这个站点的报警'),

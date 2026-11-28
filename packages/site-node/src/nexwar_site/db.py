@@ -189,6 +189,10 @@ CREATE TABLE IF NOT EXISTS incidents (
     note         TEXT NOT NULL DEFAULT '',
     detail       TEXT NOT NULL DEFAULT '{}',
     told_ms      INTEGER DEFAULT 0,
+    verify       INTEGER NOT NULL DEFAULT 0,
+    verdict      TEXT NOT NULL DEFAULT '',
+    verify_alert TEXT NOT NULL DEFAULT '',
+    result_ms    INTEGER,
     UNIQUE (source, event_id)
 );
 CREATE INDEX IF NOT EXISTS incidents_task ON incidents(task_id);
@@ -508,6 +512,88 @@ CREATE TABLE IF NOT EXISTS zone_areas (
     updated_by  TEXT NOT NULL DEFAULT '',
     updated_ms  INTEGER NOT NULL,
     PRIMARY KEY (map_id, map_version, zone)
+);
+-- 1.1-1 认出保安:人脸登记(本人同意;特征值整串加密,不存照片)。
+CREATE TABLE IF NOT EXISTS face_book (
+    account    TEXT PRIMARY KEY,
+    consent_ms INTEGER NOT NULL,
+    feats      TEXT NOT NULL,
+    n          INTEGER NOT NULL,
+    updated_ms INTEGER NOT NULL
+);
+-- 1.1-1 第 4 步:认出来的保安经过(同一人、同一台、同一防区 5 分钟内并成一笔;留 90 天)。
+CREATE TABLE IF NOT EXISTS guard_passes (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    account  TEXT NOT NULL,
+    robot    TEXT NOT NULL,
+    zone     TEXT NOT NULL DEFAULT '',
+    how      TEXT NOT NULL,
+    first_ms INTEGER NOT NULL,
+    last_ms  INTEGER NOT NULL,
+    n        INTEGER NOT NULL,
+    score    REAL,
+    dist_m   REAL
+);
+CREATE INDEX IF NOT EXISTS guard_passes_at ON guard_passes(first_ms);
+CREATE INDEX IF NOT EXISTS guard_passes_who ON guard_passes(account, last_ms);
+-- 1.1-5 电子值班簿:保安手写的,只追加(写错了另写一条 corrects 指向被更正的)。
+CREATE TABLE IF NOT EXISTS ob_entries (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    at_ms      INTEGER NOT NULL,
+    written_ms INTEGER NOT NULL,
+    author     TEXT NOT NULL,
+    category   TEXT NOT NULL,
+    text       TEXT NOT NULL,
+    robot      TEXT NOT NULL DEFAULT '',
+    alert_key  TEXT NOT NULL DEFAULT '',
+    corrects   INTEGER
+);
+CREATE INDEX IF NOT EXISTS ob_at ON ob_entries(at_ms);
+-- 外审 1.1 第 2 轮 #12:一条只能有一个更正(两个人同时更正,后到的那个被拒)
+CREATE UNIQUE INDEX IF NOT EXISTS ob_corrects ON ob_entries(corrects) WHERE corrects IS NOT NULL;
+-- 1.1-4 远程喊话:按住说话(out)、听回话(in)的录音;文件在 <home>/talk/,留一天。
+CREATE TABLE IF NOT EXISTS talk_clips (
+    id         TEXT PRIMARY KEY,
+    robot      TEXT NOT NULL,
+    direction  TEXT NOT NULL,
+    account    TEXT NOT NULL DEFAULT '',
+    ext        TEXT NOT NULL,
+    bytes      INTEGER NOT NULL DEFAULT 0,
+    created_ms INTEGER NOT NULL,
+    state      TEXT NOT NULL,
+    error      TEXT NOT NULL DEFAULT ''
+);
+-- 1.1-2 告警外发:WhatsApp / Telegram / 邮件 / webhook 渠道(令牌、口令整串加密)。
+CREATE TABLE IF NOT EXISTS notify_channels (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind       TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    targets    TEXT NOT NULL,
+    levels     TEXT NOT NULL DEFAULT 'P1',
+    lang       TEXT NOT NULL DEFAULT 'en',
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    config     TEXT NOT NULL DEFAULT '{}',
+    secret     TEXT NOT NULL DEFAULT '',
+    last_ok_ms INTEGER,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_ms INTEGER NOT NULL,
+    updated_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS notify_outbox (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_key  TEXT NOT NULL,
+    tier       INTEGER NOT NULL,
+    channel_id INTEGER NOT NULL,
+    created_ms INTEGER NOT NULL,
+    next_ms    INTEGER NOT NULL,
+    attempts   INTEGER NOT NULL DEFAULT 0,
+    sent_ms    INTEGER,
+    dropped    TEXT NOT NULL DEFAULT '',
+    error      TEXT NOT NULL DEFAULT '',
+    done       TEXT NOT NULL DEFAULT '',
+    first_sent_ms INTEGER,
+    tried      TEXT NOT NULL DEFAULT '',
+    UNIQUE (alert_key, tier, channel_id)
 );
 -- 商业化 B1c:名单第一版 —— 时段 / 人员授权。
 CREATE TABLE IF NOT EXISTS authorizations (
@@ -933,7 +1019,10 @@ CREATE TABLE IF NOT EXISTS ext_devices (
     zone        TEXT NOT NULL DEFAULT '',
     note        TEXT NOT NULL DEFAULT '',
     updated_ms  INTEGER NOT NULL,
-    updated_by  TEXT NOT NULL DEFAULT ''
+    updated_by  TEXT NOT NULL DEFAULT '',
+    verify_first INTEGER NOT NULL DEFAULT 0,
+    link        TEXT NOT NULL DEFAULT '{"via": "signed"}',
+    token_hash  TEXT NOT NULL DEFAULT ''
 );
 -- W63(库 70):设备身份。每个序列号第一次核过时的设备公钥(以后换了钥匙 = 仿冒,拒)。attest.py。
 CREATE TABLE IF NOT EXISTS device_ids (
@@ -977,6 +1066,16 @@ _ADDED_COLUMNS = (
     # W16 外审:这条入侵的告警报成了没有。老库里的行当说过了(0,升级不把历史入侵全报一遍),新记的行写
     # NULL。
     ("incidents", "told_ms", "INTEGER DEFAULT 0"),
+    # 1.1-3 报警核实:这条要先核实(设备勾了「先核实」)、核实结论、机器人到了 / 没到的时刻
+    ("incidents", "verify", "INTEGER NOT NULL DEFAULT 0"),
+    ("incidents", "verdict", "TEXT NOT NULL DEFAULT ''"),
+    ("incidents", "result_ms", "INTEGER"),
+    ("incidents", "verify_alert", "TEXT NOT NULL DEFAULT ''"),        # 1.1-3 外审第 3 轮 #5
+    # 1.1-3:外部设备「先核实再报警」、接入方式(签名回调 / 触发网址 / 报警主机 / IO 模块)、
+    # 触发口令哈希
+    ("ext_devices", "verify_first", "INTEGER NOT NULL DEFAULT 0"),
+    ("ext_devices", "link", "TEXT NOT NULL DEFAULT '{\"via\": \"signed\"}'"),
+    ("ext_devices", "token_hash", "TEXT NOT NULL DEFAULT ''"),
     # W17:告警带现场(狗在哪、哪一趟、拦截点),JSON。老行没有。
     ("alerts", "context", "TEXT NOT NULL DEFAULT '{}'"),
     # W17:会话的用途,'' 普通、'watch' 值守令牌(只能看告警、30 天)。老行都是普通会话。
@@ -1054,6 +1153,9 @@ _ADDED_COLUMNS = (
     ("routes", "title", "TEXT NOT NULL DEFAULT ''"),
     ("route_schedules", "title", "TEXT NOT NULL DEFAULT ''"),
     ("retired_ids", "definition", "TEXT NOT NULL DEFAULT ''"),           # 库 77 第 13 轮 W13-01
+    ("notify_outbox", "done", "TEXT NOT NULL DEFAULT ''"),          # 外审 1.1 #6:已发到的收件人
+    ("notify_outbox", "first_sent_ms", "INTEGER"),                   # 外审 1.1 #6:算一小时上限
+    ("notify_outbox", "tried", "TEXT NOT NULL DEFAULT ''"),         # 外审 1.1 第 6 轮 #2:试过没发到
 )
 
 

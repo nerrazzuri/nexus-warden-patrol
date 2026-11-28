@@ -627,3 +627,19 @@ async def test_11_11_W6_01_机器人列表带上_当前地图有没有原点_保
         c.execute("INSERT INTO homes(robot_id, map_id, map_version, name, x, y, yaw) "
                   "VALUES ('A', ?, ?, 'h', 0, 0, 0)", m)
     assert t.site.robot_view("A")["home_set"] is True
+
+
+async def test_外审1_1_第1条_人脸特征值不落库不推_回调拿原样(台):
+    from nexwar_contract.messages import Event
+    t = 台
+    await t.run(5)
+    got, pushed = [], []
+    t.site.on_event(lambda rid, e: got.append(e))
+    t.site.feed.listen(pushed.append)
+    feat = [0.5] * 128
+    t.site._on_event("A", Event(event_id="face-1", seq=4242, boot_id="b", stamp=1,
+                                kind="face_seen", data={"faces": [{"feat": feat}]}))
+    [row] = t.db.query("SELECT data FROM events WHERE event_id='face-1'")
+    assert "0.5" not in row["data"] and '"faces": 1' in row["data"]
+    assert got[-1].data["faces"][0]["feat"] == feat
+    assert all("0.5, 0.5" not in str(p) for p in pushed)

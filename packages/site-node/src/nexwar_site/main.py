@@ -805,6 +805,11 @@ def cmd_add_admin(home: Path, name: str, password: str, role: str = "admin",
     db = SiteDB(home / "site.db")
     try:
         Accounts(db, now_ms=wall_ms).add(name, password, role=role, display_name=display_name)
+        # 外审 1.1 第 6 轮 #4:同名旧账号留下的人脸资料、经过记录,新人不继承
+        from nexwar_site.faces import FaceBook
+        from nexwar_site.guardpass import GuardPasses
+        FaceBook(db, now_ms=wall_ms).remove(name)
+        GuardPasses(db, now_ms=wall_ms).forget(name)
     finally:
         db.close()
 
@@ -897,6 +902,8 @@ class Server:
         # W16:入侵有了去向(派出去了、没狗去)、事件源被限流,告诉值守的人。
         self.incidents.on_outcome = self.alert_sources.on_incident
         self.incidents.on_throttled = self.alert_sources.on_incident_throttled
+        self.incidents.on_verdict = self._on_verdict                     # 1.1-3 报警核实
+        self.incidents.on_verify_moved = self.alert_sources.on_verify_moved
         # W20:布防模式。撤防的防区来了入侵只记账、不派狗、不报告警。
         from nexwar_site.modes import ArmingDesk
         self.arming = ArmingDesk(self.db, now_ms=wall_ms, publish=self.dispatcher.feed.publish)
@@ -916,6 +923,9 @@ class Server:
             return self.map_display.region_at(m, v, x, y) or self.areas.zone_at(m, v, x, y)
         self.alert_sources.where_of = _where
         self.authz = AuthzBook(self.db, now_ms=wall_ms)
+        # 1.1-1 认出保安:人脸登记(没装 OpenCV / 模型 → 引擎是 None,只是不能登记)
+        from nexwar_site.faces import FaceBook, load_engine
+        self.faces = FaceBook(self.db, now_ms=wall_ms, engine=load_engine())
         self.arming.authz = self.authz
         self.incidents.arming = self.arming
         # W22:分级驱离。到了拦截点由它接管(开声光、自动升级、回程)。
@@ -934,6 +944,16 @@ class Server:
         self.sightings = PersonWatch(self.db, self.dispatcher, now_ms=wall_ms, arming=self.arming,
                                      deterrence=self.deterrence)
         self.sightings.alerts = self.alerts
+        # 1.1-1 第 4 步:机器人报的脸在人脸登记里认出来 → 记「保安经过」(P3);认不出的不在这里判
+        from nexwar_site.guardpass import GuardPasses
+        self.guard_passes = GuardPasses(self.db, now_ms=wall_ms, faces=self.faces, desk=self.alerts,
+                                        zone_of=self.sightings._zone)
+        self.guard_passes.attach(self.dispatcher)
+        # 外审 1.1 第 6 轮 #4:升级前删账号留下的人脸资料、经过记录(同名新账号不能继承)
+        orphans = self.faces.forget_orphans()
+        n_passes = self.guard_passes.forget_orphans()
+        if orphans or n_passes:
+            log.info("删了已不存在账号的人脸资料 %d 份、经过记录 %d 笔", len(orphans), n_passes)
         from nexwar_site.force import ForceWatch
         #: 狗翻倒、被抱起来(W26,决策 52):按狗能力里的状态对账报 P1,布防时被抱起来响警笛。
         self.force = ForceWatch(self.db, self.dispatcher, now_ms=wall_ms, arming=self.arming)
@@ -1094,6 +1114,8 @@ class Server:
         self.api.arming = self.arming
         self.api.mapbuilds = self.mapbuilds                          # W75
         self.api.areas, self.api.authz = self.areas, self.authz      # B1c
+        self.api.faces = self.faces                                    # 1.1-1
+        self.api.guard_passes = self.guard_passes                      # 1.1-1 第 4 步
         self.sightings.areas = self.areas
         self.sightings.where_of = self.alert_sources.where_of   # W74 二期:人最后在哪
         self.force.armed_for = self.sightings.armed_now          # W44 外审 R2
@@ -1163,6 +1185,16 @@ class Server:
                                   areas=self.areas, now_ms=wall_ms)
         self.incidents.devices = self.devices
         self.api.devices = self.devices
+        # 1.1-3:不会签名的报警设备 —— 触发网址、报警主机(SIA DC-09)、IO 模块干接点(Modbus TCP)
+        from nexwar_site.alarm_in import AlarmInputs
+        self.alarm_in = AlarmInputs(
+            self.db, now_ms=wall_ms, allow=self.incidents.allow,
+            fire=lambda src, body: self.loop.call(lambda: self.incidents.handle(src, body),
+                                                  timeout_s=self.dispatcher.ack_timeout_s + 5))
+        self.alarm_in.alerts = self._loop_alerts
+        self._alarm_rx = cfg.get("alarm_receiver") if isinstance(cfg.get("alarm_receiver"),
+                                                                  dict) else {}
+        self.api.alarm_in = self.alarm_in
 
         def _zone_point(zone: str) -> dict[str, Any] | None:
             latest = self.incidents._latest_versions()
@@ -1197,6 +1229,18 @@ class Server:
         self.push.alerts = self._loop_alerts      # 推送在线程里跑:告警经事件循环
         self.alerts.push = bool(senders)
         self.api.push = self.push
+        from nexwar_site.notify import NotifyDesk
+        #: 1.1-2:告警推到 WhatsApp / Telegram / 邮件 / webhook(管理员在「系统」页配渠道)。
+        self.notify = NotifyDesk(self.db, now_ms=wall_ms,
+                                 site_name=str(cfg.get("site_name") or cfg.get("site_id") or ""))
+        self.notify.alerts = self._loop_alerts
+        self.api.notify = self.notify
+        from nexwar_site.talk import TalkDesk
+        #: 1.1-4:按住说话、听回话的录音(留一天)。
+        self.talk = TalkDesk(self.db, home / "talk", now_ms=wall_ms)
+        self.api.talk = self.talk
+        self.dispatcher.on_event(self.talk.on_event)      # 外审 1.1 #11:听回话没成
+        self.intake.talk = self.talk
         from nexwar_site import keyvault
         from nexwar_site.health import HealthDesk
         #: 体检、指标历史、诊断包(商业化 A1)。
@@ -1287,6 +1331,13 @@ class Server:
         self.api.start()
         self.intake.start()
         self._chores.start()
+        self.alarm_in.start_polling()                  # 1.1-3:IO 模块干接点
+        port = self._alarm_rx.get("sia_port")
+        if isinstance(port, int) and not isinstance(port, bool) and 0 < port < 65536:
+            try:
+                self.alarm_in.start_sia(port)          # 1.1-3:报警主机(SIA DC-09)
+            except OSError:
+                log.exception("报警主机接收端口 %s 开不了", port)
         try:
             self.cctv.sync()                       # 起来就连摄像头,不等第一拍杂事
         except Exception:
@@ -1417,6 +1468,21 @@ class Server:
     def _pose_track_tick(self) -> None:
         self.pose_track.tick(wall_ms())
 
+    def _on_verdict(self, row: dict) -> None:
+        """1.1-3 报警核实有了结论:告警那头关 P2 / 报 P1;「没人」的,这一趟到场开的驱离收掉
+        (外审 1.1 第 2 轮 #2:不然照旧升档、开警笛)。"""
+        self.alert_sources.on_verdict(row)
+        task = str(row.get("task_id") or "")
+        # 第 3 轮 #4:同一趟上还有别的报警没下结论(或看见人、真入侵)就先不收。
+        # 第 4 轮 #1:最后一条是「没核实成」也一样:整趟都没人 / 没核实成了就收
+        if row.get("verdict") in ("clear", "unverified") \
+                and getattr(self, "deterrence", None) is not None \
+                and task and self.incidents.task_settled(task, int(row.get("id") or 0)):
+            self.deterrence.stand_down(str(row.get("robot_id") or ""), task,
+                                       "报警核实:机器人到了现场,没看见人"
+                                       if row.get("verdict") == "clear"
+                                       else "报警核实没核实成:收掉这一趟的驱离,已报 P1 叫人")
+
     async def _alert_loop(self) -> None:
         """告警:每几秒看一次掉线、让 P1 未确认的升档。一拍炸了记下来、下一拍照走。
 
@@ -1433,9 +1499,12 @@ class Server:
                                      ("定位历史", "loc_history", "tick"),
                                      ("轨迹清过期", "_pose_track_tick", "__call__"),  # W44
                                      ("入侵告警补报", "incidents", "retell"),    # W16 外审
+                                     ("报警核实", "incidents", "verify_tick"),   # 1.1-3
                                      ("看见人", "sightings", "tick"),            # W33
                                      ("受力", "force", "reconcile"),             # W26
                                      ("证据没封", "evidence_watch", "tick"),     # W30b
+                                     ("录音到点删", "talk", "prune"),            # 1.1-4
+                                     ("保安经过到期删", "guard_passes", "tick"),  # 1.1-1
                                      ("版本", "compat", "tick"),                 # A7
                                      ("证书续签", "cert_renewer", "tick"),        # W55
                                      ("临时撤防到点退回", "arming", "tick"),         # W20
@@ -1452,11 +1521,13 @@ class Server:
                                      ("受力警笛", "force", "sound"),      # W26:布防时被抱起来
                                      ("天气", "weather", "tick"),         # W29:雷暴撤排程、对账限速
                                      ("推送", "push", "tick"),            # A6:P1 推到手机
+                                     ("告警外发", "notify", "tick"),      # 1.1-2:WhatsApp 等
                                      ("升级排队", "release_queue", "tick"),   # W44:充完电空闲再换
                                      ("对时", "clock_nudge", "tick")):        # W70:钟偏了发站点时刻
                 try:
                     # 推送是同步的、要等网络:放线程里;别的本来就是协程
-                    self._lane(what, getattr(getattr(self, part), meth), thread=part == "push")
+                    self._lane(what, getattr(getattr(self, part), meth),
+                               thread=part in ("push", "notify"))
                 except Exception:
                     log.exception("%s这一拍没起来", what)
         lanes = [t for t in getattr(self, "_lanes", {}).values() if not t.done()]
@@ -1525,6 +1596,7 @@ class Server:
         self._stop.set()
         if self.rtk is not None:
             self.rtk.close()
+        self.alarm_in.stop()
         for what, fn in (("遥控", self.teleop.close_all), ("API", self.api.stop),
                          ("接收口", self.intake.stop),
                          ("视频", self.video.close),

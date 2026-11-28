@@ -115,8 +115,15 @@ class DeviceBook:
         return self.areas.zone_at(map_id, ver, x, y) or ""
 
     def _wire(self, r: Any) -> dict[str, Any]:
+        import json
         d = dict(r)
         d["source"] = d["intercept"] = PREFIX + d["id"]
+        d.pop("token_hash", None)                         # 1.1-3:触发口令只给一次
+        d["verify_first"] = bool(d.get("verify_first"))
+        try:
+            d["link"] = json.loads(d.get("link") or "{}") or {"via": "signed"}
+        except ValueError:
+            d["link"] = {"via": "signed"}
         zone = self._zone(d["map_id"], d["map_version"], d["view_x"], d["view_y"])
         if zone is not None:                             # 外审 r1 #10:按现在圈的防区判
             d["zone"] = zone
@@ -139,6 +146,17 @@ class DeviceBook:
         fov = _num(d, "fov_deg", 5.0, 360.0, 90.0)
         rng = _num(d, "range_m", 0.5, 100.0, 10.0)
         note = str(d.get("note") or "")[:200]
+        # 1.1-3:「先核实再报警」—— 新登记的门磁、报警主机默认勾上(误报多);改的时候不给 = 不变
+        old = self.get(dev_id)
+        verify = d.get("verify_first", old["verify_first"] if old else kind in ("contact", "alarm"))
+        if not isinstance(verify, bool):
+            raise DeviceError("verify_first 要是 true / false")
+        from nexwar_site.alarm_in import LinkError, clean_link, token_hash
+        try:
+            link, token = clean_link(d.get("link"), old["link"] if old else None)
+        except LinkError as exc:
+            raise DeviceError(str(exc)) from exc
+        self._link_unique(dev_id, link)
         vx, vy, face, zone = self._view(kind, map_id, ver, x, y, yaw, rng)
         from nexwar_site.incidents import IncidentError
         name = PREFIX + dev_id
@@ -151,10 +169,16 @@ class DeviceBook:
         known = {s["name"] for s in self.incidents.sources()}
         if name not in known:
             secret = self.incidents.add_source(name)
+        import json
+        th = token_hash(token) if token else (
+            "" if link.get("via") != "url" else self._token_hash(dev_id))
         with self.db.tx() as c:
             c.execute("INSERT INTO ext_devices(id, kind, map_id, map_version, x, y, yaw, fov_deg, "
-                      "range_m, view_x, view_y, zone, note, updated_ms, updated_by) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                      "range_m, view_x, view_y, zone, note, updated_ms, updated_by, verify_first, "
+                      "link, token_hash) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                      "verify_first=excluded.verify_first, link=excluded.link, "
+                      "token_hash=excluded.token_hash, "
                       "kind=excluded.kind, map_id=excluded.map_id, "
                       "map_version=excluded.map_version,"
                       " x=excluded.x, y=excluded.y, yaw=excluded.yaw, fov_deg=excluded.fov_deg, "
@@ -162,8 +186,24 @@ class DeviceBook:
                       "zone=excluded.zone, note=excluded.note, updated_ms=excluded.updated_ms, "
                       "updated_by=excluded.updated_by",
                       (dev_id, kind, map_id, ver, x, y, yaw, fov, rng, vx, vy, zone, note,
-                       self._now(), by))
-        return {"device": self.get(dev_id), "source": name, "secret": secret}
+                       self._now(), by, int(verify), json.dumps(link), th))
+        return {"device": self.get(dev_id), "source": name, "secret": secret, "token": token}
+
+    def _token_hash(self, dev_id: str) -> str:
+        rows = self.db.query("SELECT token_hash FROM ext_devices WHERE id=?", (dev_id,))
+        return rows[0]["token_hash"] if rows else ""
+
+    def _link_unique(self, dev_id: str, link: dict[str, Any]) -> None:
+        """同一个报警主机防区、同一个 IO 输入只能对一台设备(不然一次报警派两回)。"""
+        keys = {"sia": ("account", "zone"), "modbus": ("host", "port", "unit", "input")}
+        k = keys.get(link.get("via", ""))
+        if k is None:
+            return
+        for other in self.list():
+            o = other["link"]
+            if other["id"] != dev_id and o.get("via") == link["via"] \
+                    and all(o.get(x) == link.get(x) for x in k):
+                raise DeviceError(f"设备 {other['id']} 已经接在这一路上了")
 
     def _view(self, kind: str, map_id: str, ver: str, x: float, y: float, yaw: float,
               rng: float) -> tuple[float, float, float, str]:

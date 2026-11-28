@@ -76,6 +76,8 @@ class IntakeServer:
         self.robot_logs: Any = None
         #: W75:站点主机出图(``nexwar_site.mapbuild.SiteMapBuilder``),收关键帧;没装是 None。
         self.mapbuilds: Any = None
+        #: 1.1-4:按住说话、听回话的录音(:class:`~nexwar_site.talk.TalkDesk`)。
+        self.talk: Any = None
         #: 永远不收的一块:``(狗, 一趟, 文件, 原因)``(主程序接到告警台)。
         self.on_refused: Callable[[str, str, str, str], None] | None = None
         self._now = now_ms
@@ -167,6 +169,11 @@ class _Handler(TlsHandlerMixin):
             except ReleaseCatalogError as exc:
                 return self._refuse(404, str(exc))
             return self._stream(path)
+        if len(parts) == 3 and parts[1] == "talk" and self.site.talk is not None:
+            path = self.site.talk.for_robot(robot, unquote(parts[2]))   # 1.1-4:按住说话
+            if path is None:
+                return self._refuse(404, "没有这段录音")
+            return self._stream(path)
         if len(parts) != 5 or parts[1] != "maps" or self.site.maps is None:
             return self._refuse(404, "没有此")
         map_id, version, name = unquote(parts[2]), unquote(parts[3]), unquote(parts[4])
@@ -177,6 +184,24 @@ class _Handler(TlsHandlerMixin):
         note = getattr(self.site.maps, "note_served", None)
         return self._stream(path, None if note is None else
                             (lambda upto: note(robot, map_id, version, name, upto)))
+
+    def _talk_reply(self) -> None:
+        robot = self.site.robot_for(self.connection.getpeercert(binary_form=True))
+        if robot is None or self.site.talk is None:
+            self._drain()
+            return self._refuse(403 if robot is None else 404, "不收")
+        try:
+            n = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            self.close_connection = True
+            return self._refuse(400, "缺长度")
+        if n <= 0 or n > 2 * 1024 * 1024:
+            self.close_connection = True
+            return self._refuse(413, "回话太大")
+        data = self.rfile.read(n)
+        if not self.site.talk.save_reply(robot, unquote(self.path[len("/talk/"):]), data):
+            return self._refuse(404, "没有在等这段回话")
+        self._reply(200, {"ok": True})
 
     def _stream(self, path, on_sent: Callable[[int], None] | None = None) -> None:
         """整个文件,或 ``Range: bytes=起-[止]`` 那一段(W09c 决定 8:狗断了从断点接着下)。"""
@@ -225,6 +250,8 @@ class _Handler(TlsHandlerMixin):
         return got or ""
 
     def do_POST(self) -> None:
+        if self.path.startswith("/talk/"):
+            return self._talk_reply()                    # 1.1-4:听回话传回来
         kinds = {WIRE_PATH: "runs", "/maps" + WIRE_PATH: "maps", "/bags" + WIRE_PATH: "bags",
                  "/video" + WIRE_PATH: "video", "/logs" + WIRE_PATH: "logs",
                  "/mapkf" + WIRE_PATH: "mapkf"}
