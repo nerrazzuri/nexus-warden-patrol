@@ -206,3 +206,39 @@ def test_外审1_1_第2轮_12_13_两人同时更正只成一个_更正不能改�
     assert sum(isinstance(r, int) for r in res) == 1, res
     assert len(db.query("SELECT 1 FROM ob_entries WHERE corrects=?", (c["id"],))) == 1
     db.close()
+
+
+def test_事件报告按拍摄时刻取照片_断网补传的旧照片不混进来_晚到的现场照片不漏(tmp_path):
+    """外审 1.1 第 10 轮:原来按收齐时刻(done_ms)筛 —— 一小时前拍、现在才补传的照片混进这次事件,
+    事件当时拍、20 分钟后才传上来的现场照片反而漏掉。"""
+    from datetime import datetime
+
+    from nexwar_site.sitetime import site_tz
+    s = 站(tmp_path, alerts=True, runs={})
+    try:
+        s.accounts.add("gina", PW, role="guard")
+        gina = _登(s, "gina")
+        a = s.loop.call(lambda: _sync(s.desk.raise_alert, kind="intrusion", robot="A",
+                                      title="北区有人闯入"))
+        t = s.db.query("SELECT first_ms FROM alerts WHERE key=?", (a.key,))[0]["first_ms"]
+
+        def st(ms):
+            return datetime.fromtimestamp(ms / 1000, timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+        def 传(run, name):
+            data = b"\xff\xd8" + name.encode()
+            s.store.put("A", run, f"photos/{name}", offset=0, data=data, total=len(data))
+        old = f"P1__front__{st(t - 3600_000)}.jpg"           # 一小时前拍的,现在才补传
+        scene = f"P2__front__{st(t + 5000)}.jpg"             # 事件当时拍的
+        传(f"巡检一/{st(t - 3700_000)}", old)
+        传(f"巡检二/{st(t - 1000)}", scene)
+        with s.db.tx() as c:                                 # 现场那张 20 分钟后才收齐
+            c.execute("UPDATE run_photos SET done_ms=? WHERE name=?", (t + 1200_000, scene))
+        code, _, page = _html(s, f"/api/alerts/{quote(a.key, safe='')}/report?lang=zh", gina)
+        assert code == 200
+        assert scene in page, "事件当时拍的照片晚到了也要在报告里"
+        assert old not in page, "一小时前拍的不该混进来"
+        when = datetime.fromtimestamp((t + 5000) // 1000, site_tz(s.db)).strftime("%H:%M:%S")
+        assert f"{when} · 巡检二 · {scene}" in page, "标拍摄时刻,不标收齐时刻"
+    finally:
+        s.close()

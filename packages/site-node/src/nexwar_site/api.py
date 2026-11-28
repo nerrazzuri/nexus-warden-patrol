@@ -94,6 +94,8 @@ log = logging.getLogger(__name__)
 _PROBLEM_BUNDLE = re.compile(r"^/api/problem-reports/(NW-\d{4}-[0-9A-F]{4})/bundle$")
 _PROBLEM_DELETE = re.compile(r"^/api/problem-reports/(NW-\d{4}-[0-9A-F]{4})/delete$")
 MAX_BODY = 64 * 1024
+#: 事件报告找照片:开跑早于这段多久以内的趟还算(一趟巡逻再长也不过半天)。
+_REPORT_RUN_SPAN_MS = 12 * 3600_000
 #: 网页易用性 P1-77:升级包不对时说人话(不提文件里的东西叫什么)。
 NOT_PKG = "选的文件不是升级包，打不开。请选我们给的 .tar.gz 升级文件。"
 NOT_SITE_PKG = "选的文件不是站点升级包（里面没有升级说明）。请选我们给的站点升级文件。"
@@ -1522,17 +1524,36 @@ class _Handler(TlsHandlerMixin):
         return self._send_bytes(page.encode(), "text/html; charset=utf-8")
 
     def _report_photos(self, robot: str, since: int, until: int) -> list[tuple[str, bytes]]:
-        """报告里的照片:这台机器人那段时间里传上来的(新的在后),每张 ≤ 2 MB。"""
+        """报告里的照片:这台机器人那段时间里**拍的**(按拍摄时刻,早的在前),每张 ≤ 2 MB。
+
+        外审 1.1 第 10 轮:原来按收齐时刻(``done_ms``)筛和标 —— 断网补传时,09:00 拍、10:00
+        才传上来的旧照片混进 10:00 的事件,10:00 拍、10:20 才传的现场照片反而漏掉。现在按名字里的
+        拍摄时刻(``photo_taken_ms``)筛、排、标;名字拆不开的才退回收齐时刻。
+        候选:开跑时刻在这段之前 ``_REPORT_RUN_SPAN_MS`` 以内、结束之前的趟。"""
+        from datetime import datetime, timezone
+
+        from nexwar_site.evidence import photo_taken_ms
         from nexwar_site.sitetime import site_tz
         runs = self.site.runs
         if runs is None:
             return []
         tz = site_tz(self.site.dispatcher.db)
-        out: list[tuple[str, bytes]] = []
+
+        def stamp(ms: int) -> str:
+            return datetime.fromtimestamp(ms / 1000, timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        picked: list[tuple[int, Any]] = []
         for r in self.site.dispatcher.db.query(
                 "SELECT p.run_id, p.name, p.done_ms, r.mission FROM run_photos p "
-                "JOIN runs r ON r.id=p.run_id WHERE r.robot_id=? AND p.done_ms>=? AND p.done_ms<? "
-                "AND p.name LIKE '%.jpg' ORDER BY p.done_ms LIMIT 32", (robot, since, until)):
+                "JOIN runs r ON r.id=p.run_id WHERE r.robot_id=? AND r.stamp>=? AND r.stamp<? "
+                "AND p.name LIKE '%.jpg' LIMIT 5000",
+                (robot, stamp(since - _REPORT_RUN_SPAN_MS), stamp(until + 1000))):
+            taken = photo_taken_ms(r["name"])
+            at = taken if taken is not None else int(r["done_ms"])
+            if since <= at < until:
+                picked.append((at, r))
+        picked.sort(key=lambda t: (t[0], t[1]["name"]))
+        out: list[tuple[str, bytes]] = []
+        for at, r in picked[:32]:
             try:
                 path = runs.photo(int(r["run_id"]), r["name"])
                 if path.stat().st_size > 2 * 1024 * 1024:
@@ -1540,8 +1561,7 @@ class _Handler(TlsHandlerMixin):
                 data = path.read_bytes()
             except Exception:                        # noqa: BLE001 - 读不到的那张不放
                 continue
-            from datetime import datetime
-            when = datetime.fromtimestamp(r["done_ms"] / 1000, tz).strftime("%H:%M:%S")
+            when = datetime.fromtimestamp(at / 1000, tz).strftime("%H:%M:%S")
             out.append((f"{when} · {r['mission']} · {r['name']}", data))
         return out
 
