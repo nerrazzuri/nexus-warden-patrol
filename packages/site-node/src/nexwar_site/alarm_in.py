@@ -46,8 +46,12 @@ TIMEOUT_S = 2.0
 #: 外审 1.1 第 8 轮 #2:几个 IO 模块一起读(各读各的,掉线模块的超时不拖慢正常模块),最多几个。
 MAX_IO_PARALLEL = 32
 #: 外审 1.1 第 9 轮 #1:报警交给后台一条一条派(派单要等机器人回执,
-#: 别让读 IO 模块、回 SIA 的 ACK 跟着等);排着没派的最多这么多条,再多的记日志不收。
+#: 别让读 IO 模块、回 SIA 的 ACK 跟着等);排着没派的最多这么多条。
+#: 外审 1.1 第 11 轮:再多的不收,但不丢 —— :meth:`AlarmInputs.trigger` 回 ``overloaded``,
+#: SIA 回 NAK(主机过会儿重发),IO 模块记着「欠一次」下一拍再交;同时报 P2 ``alarm_input_overload``,
+#: 排空了自己关。
 MAX_FIRE_QUEUE = 100
+OVERLOADED = "overloaded"
 #: SIA 入侵类事件码;Contact ID 入侵类(新事件 qualifier 1)。
 SIA_CODES = frozenset({"BA", "BV", "PA", "HA", "TA"})
 CID_CODES = frozenset({*range(120, 140), 144, 145})
@@ -243,24 +247,38 @@ class AlarmInputs:
         return out
 
     def trigger(self, dev_id: str, *, via: str, what: str) -> dict[str, Any] | None:
-        """这台设备报警了:按签名回调那一路处理(限流、布防、合并、派机器人)。"""
+        """这台设备报警了:按签名回调那一路处理(限流、布防、合并、派机器人)。
+
+        回 ``None``:限流不收(故意的);``{"outcome": "overloaded"}``:排满了没收,调用的要重交。"""
         source = f"dev-{dev_id}"
         st = self.status.setdefault(dev_id, {})
         st.update(last_ms=self._now(), what=what)
-        if self._allow is not None and not self._allow(source):
-            log.warning("设备 %s 一分钟内报得太多,这次不收(%s)", dev_id, what)
-            return None
         body = {"event_id": f"{via}-{uuid.uuid4().hex[:16]}", "type": "intrusion",
                 "zone": "-", "detail": {"via": via, "what": what[:200]}}
-        log.info("报警输入:设备 %s(%s)%s", dev_id, via, what)
         if not self._background:
-            return self._fire_one(dev_id, source, body)
-        with self._qlock:
-            if self._queued >= MAX_FIRE_QUEUE:
-                log.error("报警输入排着没派的已有 %d 条:设备 %s 这次不收(%s)", self._queued,
-                          dev_id, what)
+            if self._allow is not None and not self._allow(source):
+                log.warning("设备 %s 一分钟内报得太多,这次不收(%s)", dev_id, what)
                 return None
-            self._queued += 1
+            log.info("报警输入:设备 %s(%s)%s", dev_id, via, what)
+            return self._fire_one(dev_id, source, body)
+        # 外审 1.1 第 11 轮:先占一个排队的位子,占不到回 overloaded(调用的重交);
+        # 占到了再看限流 —— 排满了时的重交不吃限流的额度
+        with self._qlock:
+            full = self._queued >= MAX_FIRE_QUEUE
+            if not full:
+                self._queued += 1
+        if full:
+            log.error("报警输入排着没派的已有 %d 条:设备 %s 这次先不收,等会儿重交(%s)",
+                      MAX_FIRE_QUEUE, dev_id, what)
+            self._overload(True)
+            return {"outcome": OVERLOADED}
+        if self._allow is not None and not self._allow(source):
+            with self._qlock:
+                self._queued -= 1
+            log.warning("设备 %s 一分钟内报得太多,这次不收(%s)", dev_id, what)
+            return None
+        log.info("报警输入:设备 %s(%s)%s", dev_id, via, what)
+        with self._qlock:
             if self._fireq is None:
                 self._fireq = ThreadPoolExecutor(max_workers=1, thread_name_prefix="alarm-in-fire")
             q = self._fireq
@@ -271,8 +289,30 @@ class AlarmInputs:
             finally:
                 with self._qlock:
                     self._queued -= 1
+                    empty = self._queued == 0
+                if empty:
+                    self._overload(False)
         q.submit(run)
         return {"outcome": "queued"}
+
+    def _overload(self, on: bool) -> None:
+        """外审 1.1 第 11 轮:排满了报 P2(一条),排空了关掉。"""
+        if self.alerts is None:
+            return
+        from nexwar_site.alert_sources import SITE
+        try:
+            is_open = self.alerts.has_open(SITE, "alarm_input_overload")
+            if on and not is_open:
+                self.alerts.raise_alert(
+                    kind="alarm_input_overload", robot=SITE,
+                    title=f"报警输入积压:排着没派的满 {MAX_FIRE_QUEUE} 条",
+                    detail="新报警暂时收不进来(报警主机会重发,IO 模块下一拍重交);"
+                           "看是不是哪一路在连着报,或者机器人都在忙")
+            elif not on and is_open:
+                self.alerts.resolve_all(SITE, "alarm_input_overload",
+                                        who="site:alarm_input_drained")
+        except Exception:
+            log.exception("报警输入积压的告警没报成")
 
     def _fire_one(self, dev_id: str, source: str, body: dict[str, Any]) -> dict[str, Any] | None:
         try:
@@ -297,14 +337,20 @@ class AlarmInputs:
         if not hits:
             return ack
         devs = self._devices("sia")
+        full = False
         for acct, zone, what in hits:
             match = [d for d in devs if d["account"] == acct and (
                 not d.get("zone") or (zone is not None and int(d["zone"]) == zone))]
             exact = [d for d in match if d.get("zone")]
             for d in exact or match:
-                self.trigger(d["id"], via="sia", what=f"{what} 用户 {acct} 防区 {zone}")
+                r = self.trigger(d["id"], via="sia", what=f"{what} 用户 {acct} 防区 {zone}")
+                if r is not None and r.get("outcome") == OVERLOADED:
+                    full = True
             if not match:
                 log.warning("报警主机 %s 防区 %s 报警(%s),没对上任何设备", acct, zone, what)
+        if full:
+            # 外审 1.1 第 11 轮:排满了没收 —— 回 NAK,主机过会儿按没确认的重发(不能回 ACK 把它吞了)
+            return _ack(None, b"NAK")
         return ack
 
     def start_sia(self, port: int, host: str = "0.0.0.0") -> int:
@@ -388,14 +434,18 @@ class AlarmInputs:
             on = bits[d["input"]] != d["nc"]            # 常闭:断开(0)= 报警
             st = self.status.setdefault(d["id"], {})
             st.update(error="", state="alarm" if on else "normal")
-            m = self._modbus.setdefault(d["id"], {"streak": 0, "fired": False})
+            m = self._modbus.setdefault(d["id"], {"streak": 0, "fired": False, "owed": False})
             m["streak"] = m["streak"] + 1 if on else 0
             if not on:
                 m["fired"] = False
-            elif m["streak"] >= 2 and not m["fired"]:
-                m["fired"] = True
-                self.trigger(d["id"], via="modbus",
-                             what=f"IO 模块 {key[0]} 输入 {d['input']}")
+            # 外审 1.1 第 11 轮:交上去了才算报过;排满了没收的记着「欠一次」,下一拍再交
+            # (哪怕这时候已经回到正常 —— 短脉冲也不丢)
+            if m.get("owed") or (on and m["streak"] >= 2 and not m["fired"]):
+                r = self.trigger(d["id"], via="modbus",
+                                 what=f"IO 模块 {key[0]} 输入 {d['input']}")
+                m["owed"] = r is not None and r.get("outcome") == OVERLOADED
+                if on and not m["owed"]:
+                    m["fired"] = True
 
     def _raise_lost(self, key: tuple[str, int, int], why: str) -> None:
         if self.alerts is None:

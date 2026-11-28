@@ -112,6 +112,10 @@
     "en": "Alarm input lost",
     "zh": "报警输入中断"
   },
+  "alarm_input_overload": {
+    "en": "Alarm inputs backed up",
+    "zh": "报警输入积压"
+  },
   "thermal_fire": {
     "en": "Possible fire (thermal camera)",
     "zh": "热像发现疑似起火"

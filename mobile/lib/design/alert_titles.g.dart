@@ -30,6 +30,7 @@ const Map<String, (String, String)> alertTitles = <String, (String, String)>{
   'push_failed': ('P1 push notifications failing', 'P1 推送发送失败'),
   'intrusion_verifying': ('Alarm triggered, robot verifying', '报警器报警，机器人去核实'),
   'alarm_input_lost': ('Alarm input lost', '报警输入中断'),
+  'alarm_input_overload': ('Alarm inputs backed up', '报警输入积压'),
   'thermal_fire': ('Possible fire (thermal camera)', '热像发现疑似起火'),
   'thermal_overheat': ('Hot spot (thermal camera)', '热像发现高温点'),
   'guard_passed': ('Registered guard passed', '登记过的保安经过'),

@@ -259,6 +259,9 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
     (0x0810, "sense.thermometry_failed", "warn", "engineer", "热像量不了温度", "Thermal camera not reporting temperature",
      "看热像的测温规则和账号", "Check the camera's temperature rule and login"),
     (0x0811, "sense.guard_passed", "info", "user", "登记过的保安经过", "Registered guard passed", "", ""),
+    (0x0812, "sense.alarm_input_overload", "warn", "engineer", "报警输入积压，新报警暂时收不进来",
+     "Alarm inputs backed up; new alarms not accepted yet",
+     "看是不是哪一路在连着报；机器人都在忙时也会这样", "Check for an input that keeps triggering; also happens when every robot is busy"),
     # ---- 0x09 升级与配置
     (0x0901, "update.release_failed", "warn", "engineer", "机器人升级失败", "Robot upgrade failed", "看升级页的原因", "See the reason on the Upgrades page"),
     (0x0902, "update.agent_too_old", "warn", "engineer", "机器人软件比站点旧", "Robot software older than the site", "升级机器人", "Upgrade the robot"),
@@ -291,6 +294,7 @@ ALERT: dict[str, str] = {
     "deter_failed": "robot.deter_failed",
     "intrusion_unanswered": "sense.intrusion_unanswered", "intrusion_person": "sense.intrusion_person",
     "intrusion_verifying": "sense.intrusion_verifying", "alarm_input_lost": "sense.alarm_input_lost",
+    "alarm_input_overload": "sense.alarm_input_overload",
     "thermal_fire": "sense.thermal_fire", "thermal_overheat": "sense.thermal_overheat",
     "thermometry_failed": "sense.thermometry_failed", "guard_passed": "sense.guard_passed",
     "deter_cornered": "sense.deter_cornered", "battery_abort": "robot.battery_abort",

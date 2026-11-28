@@ -190,6 +190,7 @@ LEVEL_OF: dict[str, Level] = {
     "thermal_fire": Level.P1,                  # 1.1-6 热像起火线
     "thermal_overheat": Level.P2,              # 1.1-6 热像高温线
     "thermometry_failed": Level.P2,
+    "alarm_input_overload": Level.P2,          # 外审 1.1 第 11 轮:报警输入积压、收不进来
     # P2:今天之内处理。不影响这一趟巡检能不能跑完,但拖久了会变成 P1
     # (盘满了继续拖,就会变成没法记录;上传积压继续拖,数据就旧到没用)。
     "finding": Level.P2,

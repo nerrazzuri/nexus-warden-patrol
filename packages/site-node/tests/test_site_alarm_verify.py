@@ -599,3 +599,58 @@ def test_外审1_1_第9轮_1_派单等回执的时候_照样每拍读IO模块_�
         _t.sleep(0.02)
     assert fired == ["dev-pir-a", "dev-pir-b"], "两条都派了,按先后"
     rx.stop()
+
+
+def test_外审1_1_第11轮_1_报警排满了不丢(核, monkeypatch):
+    """SIA 回 NAK;IO 欠一次下一拍再交,短脉冲也不丢;排满了报 P2,排空了自己关。"""
+    import threading
+    import time as _t
+    t = 核
+    monkeypatch.setattr(alarm_in, "MAX_FIRE_QUEUE", 1)
+    gate = threading.Event()
+    fired: list = []
+
+    def 慢派(source, body):                               # 等机器人回执
+        fired.append(source)
+        gate.wait(5)
+        return {"outcome": "dispatched"}
+    m = 假模块()
+    rx = AlarmInputs(t.db, fire=慢派, now_ms=t.clock, read=m.read)
+    rx.alerts = t.alerts
+    for dev, inp in (("pir-a", 0), ("pir-b", 1)):
+        _门磁(t, dev, link={"via": "modbus", "host": "10.0.0.9", "port": 502, "unit": 1,
+                            "input": inp, "nc": False})
+    _门磁(t, "pir-5", link={"via": "sia", "account": "1234", "zone": "5"})
+    sia = _sia(b'"SIA-DCS"0007R0L0#1234[#1234|Nri1/BA005]')
+
+    def 等(cond):
+        for _ in range(250):
+            if cond():
+                return True
+            _t.sleep(0.02)
+        return False
+    m.bits[0] = True
+    rx.poll_once()
+    rx.poll_once()                                        # pir-a 占满了队(卡着等回执)
+    assert 等(lambda: fired == ["dev-pir-a"])
+    assert b'"NAK"' in rx.on_sia(sia), "排满了没收:回 NAK 让主机重发,不能回 ACK 吞掉"
+    assert _开着(t, "alarm_input_overload"), "排满了报 P2"
+    m.bits[1] = True
+    rx.poll_once()
+    rx.poll_once()                                        # pir-b 报警,排不上
+    m.bits[1] = False
+    rx.poll_once()                                        # 短脉冲:已经回到正常
+    assert rx._modbus["pir-b"]["owed"] is True
+    gate.set()
+    assert 等(lambda: rx._queued == 0)
+    assert 等(lambda: not _开着(t, "alarm_input_overload")), "排空了自己关"
+    rx.poll_once()                                        # 欠的那次下一拍交上去
+    assert 等(lambda: fired == ["dev-pir-a", "dev-pir-b"]), fired
+    assert 等(lambda: rx._queued == 0)
+    assert b'"ACK"0007R0L0#1234[]' in rx.on_sia(sia), "主机重发:这回收了"
+    assert 等(lambda: fired == ["dev-pir-a", "dev-pir-b", "dev-pir-5"]), fired
+    assert rx._modbus["pir-b"]["owed"] is False and rx._modbus["pir-b"]["fired"] is False
+    rx.poll_once()
+    _t.sleep(0.1)
+    assert fired.count("dev-pir-b") == 1, "交上去了就不再重交"
+    rx.stop()
