@@ -736,6 +736,15 @@ abstract class SiteApi {
   /// 改自己的密码（要旧密码）。成功后站点吊销这个账号的所有会话。
   Future<void> changeOwnPassword(String oldPassword, String newPassword);
 
+  /// 1.1-1：自己的人脸登记（几张、站点装没装人脸模块）。
+  Future<Map<String, dynamic>> myFaces();
+
+  /// 1.1-1：本人加一张登记照（JPEG 的 base64；本人在页面上勾了同意才会调）。
+  Future<Map<String, dynamic>> addFacePhoto(String jpegB64);
+
+  /// 1.1-1：删掉自己的人脸资料（撤销同意）。
+  Future<Map<String, dynamic>> removeMyFaces();
+
   /// 批准（要再输一次自己的密码；[role] 默认只看）、拒绝。
   Future<Map<String, dynamic>> approveAccount(String id, String role, String password);
   Future<void> rejectAccount(String id);
@@ -2100,6 +2109,16 @@ class SiteClient implements SiteApi {
   Future<void> changeOwnPassword(String oldPassword, String newPassword) async {
     await _send('POST', '/api/me/password', <String, dynamic>{'old': oldPassword, 'new': newPassword});
   }
+
+  @override
+  Future<Map<String, dynamic>> myFaces() async => _map(await _send('GET', '/api/faces/me'));
+
+  @override
+  Future<Map<String, dynamic>> addFacePhoto(String jpegB64) async =>
+      _map(await _send('POST', '/api/faces/me/photo', <String, dynamic>{'consent': true, 'jpeg_b64': jpegB64}));
+
+  @override
+  Future<Map<String, dynamic>> removeMyFaces() async => _map(await _send('POST', '/api/faces/me/remove'));
 
   @override
   Future<List<Map<String, dynamic>>> accounts() async {

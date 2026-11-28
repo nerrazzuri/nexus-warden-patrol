@@ -19,6 +19,7 @@ import 'package:nexwar_patrol/ui/site_video.dart';
 import 'package:nexwar_patrol/ui/widget/live_video.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nexwar_patrol/ui/face_enrol.dart';
 
 import 'support/fake_site.dart';
 import 'support/shell_nav.dart';
@@ -1042,6 +1043,24 @@ class FakeApi implements SiteApi {
     if (passwordError != null) throw passwordError!;
   }
 
+  // 1.1-1：人脸登记
+  Map<String, dynamic> faces = <String, dynamic>{'photos': 0, 'max_photos': 5, 'engine': true};
+  SiteError? faceError;
+  @override
+  Future<Map<String, dynamic>> myFaces() async => faces;
+  @override
+  Future<Map<String, dynamic>> addFacePhoto(String jpegB64) async {
+    calls.add('face-photo ${jpegB64.length}');
+    if (faceError != null) throw faceError!;
+    return faces = <String, dynamic>{...faces, 'photos': (faces['photos'] as int) + 1};
+  }
+
+  @override
+  Future<Map<String, dynamic>> removeMyFaces() async {
+    calls.add('face-remove');
+    return faces = <String, dynamic>{...faces, 'photos': 0};
+  }
+
   @override
   Future<List<Map<String, dynamic>>> accounts() async {
     calls.add('accounts');
@@ -1693,6 +1712,48 @@ void main() {
     expect(find.textContaining('留在原地'), findsOneWidget);
     final due = (v['standby_countdown'] as Map)['due_ms'] as int;
     expect(returnCountdownS(v, now: DateTime.fromMillisecondsSinceEpoch(due - 9100)), 10);
+  });
+
+  testWidgets('1.1-1 人脸登记：本人勾同意才能拍；拍坏了说原因；能删掉', (t) async {
+    final api = FakeApi('guard');
+    var shots = 0;
+    await t.pumpWidget(MaterialApp(home: FaceEnrolPage(api: api, take: () async {
+      shots++;
+      return Uint8List.fromList(<int>[1, 2, 3]);
+    })));
+    await t.pumpAndSettle();
+    expect(find.textContaining('0 / 5'), findsOneWidget);
+    await t.tap(find.byKey(FaceEnrolPage.takeKey));
+    await t.pumpAndSettle();
+    expect(shots, 0, reason: '没勾同意不能拍');
+    await t.tap(find.byKey(FaceEnrolPage.consentKey));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(FaceEnrolPage.takeKey));
+    await t.pumpAndSettle();
+    expect(shots, 1);
+    expect(api.calls, contains('face-photo 4'));
+    expect(find.textContaining('1 / 5'), findsOneWidget);
+    expect(find.textContaining('再拍 2 张'), findsOneWidget);
+    api.faceError = const SiteError(400, '脸太小:手机拿近一点再拍');
+    await t.tap(find.byKey(FaceEnrolPage.takeKey));
+    await t.pumpAndSettle();
+    expect(find.textContaining('没登记上'), findsOneWidget);
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeKey));
+    await t.pumpAndSettle();
+    await t.ensureVisible(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.tap(find.byKey(FaceEnrolPage.removeYesKey));
+    await t.pumpAndSettle();
+    expect(api.calls, contains('face-remove'));
+    expect(find.textContaining('0 / 5'), findsOneWidget);
+  });
+
+  testWidgets('1.1-1 人脸登记：站点没装人脸模块 —— 说清楚，没有拍照按钮', (t) async {
+    final api = FakeApi('guard')..faces = <String, dynamic>{'photos': 0, 'max_photos': 5, 'engine': false};
+    await t.pumpWidget(MaterialApp(home: FaceEnrolPage(api: api, take: () async => null)));
+    await t.pumpAndSettle();
+    expect(find.textContaining('没装人脸识别模块'), findsOneWidget);
+    expect(find.byKey(FaceEnrolPage.takeKey), findsNothing);
   });
 
   testWidgets('真机 11-25：有喇叭的机器人有「静音」，静音着变「取消静音」', (t) async {

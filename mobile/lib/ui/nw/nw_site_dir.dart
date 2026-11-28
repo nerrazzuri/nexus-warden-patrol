@@ -12,6 +12,7 @@ import '../../l10n.dart';
 import '../../net/site_client.dart';
 import '../../store/site_store.dart';
 import '../alarm_log.dart';
+import '../face_enrol.dart';
 import '../app_settings.dart' show openSettings;
 import '../guide.dart';
 import '../map_manage.dart';
@@ -47,6 +48,7 @@ class SiteDirectory extends StatelessWidget {
   static Key itemKey(SiteDest d) => Key('site-${d.name}');
   static const Key leaveKey = Key('site-leave');
   static const Key passwordKey = Key('site-password');
+  static const Key facesKey = Key('site-faces');
 
   void _push(BuildContext context, Widget page) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
@@ -186,6 +188,11 @@ class _AccountBlockState extends State<_AccountBlock> {
           Divider(height: 1, thickness: 1, color: c.outline),
           row(SiteDirectory.passwordKey, tr('Change password', '改密码'), null,
               () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ChangePasswordPage(api: widget.api)))),
+          Divider(height: 1, thickness: 1, color: c.outline),
+          // 1.1-1：登记自己的脸，机器人巡逻时认得出是工作人员
+          row(SiteDirectory.facesKey, tr('Face enrolment', '人脸登记'),
+              tr('So the robot recognises you as staff', '让机器人认得你是工作人员'),
+              () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => FaceEnrolPage(api: widget.api)))),
           Divider(height: 1, thickness: 1, color: c.outline),
           row(SiteDirectory.leaveKey, tr('Leave site', '退出站点'),
               tr("Return to the site list; this phone stops receiving this site's alerts", '回到站点列表；这台手机不再收这个站点的报警'),

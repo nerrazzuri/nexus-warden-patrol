@@ -122,6 +122,7 @@ export function AccessPage({ say, now }: { say: Say; now: number }) {
               </tbody>
             </table>
           </section>
+          <FaceRoster say={say} />
         </div>
         <aside class="sp-side ac-side">
           <AddAuthz key={zones.join("|")} zones={zones} say={say} onDone={() => { void load(); say(t("authzAddedMsg")); }} />
@@ -277,5 +278,51 @@ function AddAuthz({ zones, onDone, say }: { zones: string[]; onDone: () => void;
         <button type="button" class="btn" onClick={() => setF(blank())}>{t("acClear")}</button>
       </div>
     </form>
+  );
+}
+
+interface FaceRow { account: string; consent_ms: number; photos: number; updated_ms: number }
+
+/** 1.1-1 认出保安:谁登记了人脸(本人在 App 上登记;这里只能看和删)。没有管理权限(读不到)就不显示。 */
+export function FaceRoster({ say }: { say: Say }) {
+  const [rows, setRows] = useState<FaceRow[] | null>(null);
+  const [engine, setEngine] = useState(true);
+  const [removing, setRemoving] = useState<FaceRow | null>(null);
+  useEffect(() => {
+    api<{ faces: FaceRow[]; engine: boolean }>("GET", "/api/faces")
+      .then((d) => { setRows(d.faces ?? []); setEngine(d.engine !== false); })
+      .catch(() => setRows(null));
+  }, []);
+  if (rows === null) return null;
+  async function remove(r: FaceRow) {
+    try {
+      const d = await api<{ faces: FaceRow[] }>("POST", `/api/faces/${enc(r.account)}/remove`, {});
+      setRows(d.faces ?? []);
+      say(t("fcDeleted", { name: r.account }));
+    } catch (e) { say(errText(e)); }
+  }
+  return (
+    <section class="sp-sec acc-faces" data-faces>
+      <h2 class="sp-h"><span>{t("fcTitle")}</span><small>{t("fcHint")}</small></h2>
+      {!engine && <p class="muted">{t("fcNoEngine")}</p>}
+      <table class="sp-table">
+        <thead><tr><th>{t("fcColWho")}</th><th>{t("fcColPhotos")}</th><th>{t("fcColWhen")}</th><th /></tr></thead>
+        <tbody>
+          {rows.length === 0 && <tr><td colSpan={4} class="muted">{t("fcNone")}</td></tr>}
+          {rows.map((r) => (
+            <tr key={r.account} data-face={r.account}>
+              <td><b>{r.account}</b></td>
+              <td class="mono">{r.photos}</td>
+              <td class="mono">{new Date(r.consent_ms).toLocaleDateString("sv-SE")}</td>
+              <td class="ac-del"><button type="button" class="btn" onClick={() => setRemoving(r)}>{t("fcDelete")}</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {removing && (
+        <Confirm text={t("fcDeleteAsk", { name: removing.account })} yes={t("fcDelete")} danger
+          onNo={() => setRemoving(null)} onYes={() => { const r = removing; setRemoving(null); void remove(r); }} />
+      )}
+    </section>
   );
 }
