@@ -104,6 +104,10 @@
     "en": "P1 push notifications failing",
     "zh": "P1 推送发送失败"
   },
+  "notify_failed": {
+    "en": "Alerts not reaching WhatsApp / Telegram / email",
+    "zh": "告警外发发送失败"
+  },
   "cert_expiring": {
     "en": "Certificate expiring soon",
     "zh": "证书即将到期"

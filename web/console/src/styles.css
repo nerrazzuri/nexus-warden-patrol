@@ -1136,6 +1136,13 @@ img.cam-live { width: 100%; max-height: 60vh; object-fit: contain; background: #
 .sys-row > .muted { min-width: 140px; }
 .sys-row.bad b { color: var(--c-error); }
 .sys-row.warn b { color: var(--c-warning); }
+/* 1.1-2 告警渠道 */
+.sys-notify td.bad { color: var(--c-error); }
+.sys-notify .sp-table { margin-bottom: var(--sp-3); }
+.nt-form { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) 0; border-top: 1px solid var(--c-outline); }
+.nt-form .field { display: flex; flex-direction: column; gap: 4px; }
+.nt-form .field input, .nt-form .field select { min-height: 40px; }
+@media (max-width: 640px) { .sys-notify .sp-table { display: block; overflow-x: auto; } }
 .up-rel { display: flex; flex-direction: column; gap: var(--sp-2); padding: 8px 0; border-bottom: 1px solid var(--c-outline); }
 .up-robot { display: inline-flex; gap: var(--sp-1); align-items: center; margin-right: 12px; }
 

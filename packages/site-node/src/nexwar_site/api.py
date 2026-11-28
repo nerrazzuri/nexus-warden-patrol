@@ -133,6 +133,8 @@ _ARM_EX = re.compile(r"^/api/arming/exceptions/(\d{1,9})/remove$")
 _AUTHZ = re.compile(r"^/api/lists/authorizations(?:/(\d{1,9})/(remove|end))?$")
 #: 1.1-1 认出保安:人脸登记(``me`` = 自己;别人的账号名只能删)
 _FACES = re.compile(r"^/api/faces(?:/([^/]{1,64})(?:/(photo|remove))?)?$")
+#: 1.1-2 告警外发渠道。
+_NOTIFY = re.compile(r"^/api/notify(?:/([0-9]{1,9})(?:/(test|remove))?)?$")
 #: 网页上登记 / 出开通码 / 吊销机器狗(商业化 B1b,管理员)。
 _ADMIN_ROBOT = re.compile(r"^/api/admin/robots(?:/([^/]{1,64})/(code|revoke|name))?$")
 #: W42:机器人轮询自己的绑定申请;站点上的人批准 / 拒绝。
@@ -384,6 +386,7 @@ class SiteApi:
         self.areas: Any = None
         self.authz: Any = None
         self.faces: Any = None                            # 1.1-1 认出保安
+        self.notify: Any = None                           # 1.1-2 告警外发
         #: W73:防区的查看点、值守位(``guard_plan.ZonePosts``;第一次用时按防区、路线库的规划现建)。
         self._zone_posts: Any = None
         self._marks: Any = None
@@ -875,6 +878,10 @@ class _Handler(TlsHandlerMixin):
             m = _AUTHZ.match(path)
             if m is not None:
                 return self._authz(method, m.group(1), user, m.group(2))
+            m = _NOTIFY.match(path)
+            if m is not None:
+                return self._notify(method, int(m.group(1)) if m.group(1) else None,
+                                    m.group(2), user)
             m = _FACES.match(path)
             if m is not None:
                 return self._faces(method, unquote(m.group(1)) if m.group(1) else None,
@@ -2590,6 +2597,42 @@ class _Handler(TlsHandlerMixin):
         if not book.remove(acc):
             raise HttpError(404, "这个人没登记过")
         return self._send_json(200, book.view(acc) if acc == me else {"faces": book.list()})
+
+    def _notify(self, method: str, cid: int | None, action: str | None, user) -> None:
+        """1.1-2 告警外发渠道(``manage``):``GET /api/notify`` 渠道和最近发的;``POST /api/notify``
+        加一个;``POST /api/notify/{id}`` 改(``secret`` 不给 = 不变);``…/test`` 发一条测试;
+        ``…/remove`` 删。令牌、口令只进不出,审计里不记。"""
+        from nexwar_site.notify import NotifyError
+        desk = self.site.notify
+        if desk is None:
+            raise HttpError(404, "此站点未启用告警外发")
+        self._need(user, MANAGE)
+        if method == "GET" and cid is None:
+            return self._send_json(200, desk.view())
+        if method != "POST":
+            raise HttpError(405, "只支持 POST")
+        self._audit_target = f"notify/{cid if cid is not None else 'new'}"
+        try:
+            if action == "test":
+                r = desk.send_test(cid)
+                self._audit_detail = {"ok": r["ok"]}
+                return self._send_json(200, r)
+            if action == "remove":
+                if not desk.remove(cid):
+                    raise HttpError(404, "没有这个渠道")
+                self._audit_detail = {"removed": cid}
+                return self._send_json(200, desk.view())
+            d = self._body()
+            ch = desk.save(d, cid=cid)
+        except KeyError as exc:
+            raise HttpError(404, "没有这个渠道") from exc
+        except NotifyError as exc:
+            raise HttpError(400, str(exc)) from exc
+        self._audit_target = f"notify/{ch['id']}"
+        self._audit_detail = {"kind": ch["kind"], "name": ch["name"], "targets": len(ch["targets"]),
+                              "levels": ch["levels"], "enabled": ch["enabled"],
+                              "secret_changed": bool(d.get("secret"))}
+        return self._send_json(200, ch)
 
     def _pairing_addresses(self) -> None:
         """手机可能连得上的站点地址(POC):手配的主机名 + 主机网卡的局域网 IPv4,端口是这个接口的端口。

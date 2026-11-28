@@ -6,6 +6,7 @@ import { api, ApiError } from "./api";
 import type { Me } from "./app";
 import { hms } from "./data";
 import { t, type Key } from "./i18n";
+import { NotifyPanel } from "./notifypanel";
 import { SiteMetrics, SiteOps } from "./remoteops";
 import { checkText } from "./sitetext";
 
@@ -45,6 +46,7 @@ export function SystemPage2({ me, now, say }: { me: Me; now: number; say: (s: st
       </section>
       <TeleopSpeeds say={say} />
       <SiteOps say={say} />
+      <NotifyPanel say={say} />
       <SiteMetrics />
       <PairPhone />
     </section>

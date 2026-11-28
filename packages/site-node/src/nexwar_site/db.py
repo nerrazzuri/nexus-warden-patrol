@@ -517,6 +517,35 @@ CREATE TABLE IF NOT EXISTS face_book (
     n          INTEGER NOT NULL,
     updated_ms INTEGER NOT NULL
 );
+-- 1.1-2 告警外发:WhatsApp / Telegram / 邮件 / webhook 渠道(令牌、口令整串加密)。
+CREATE TABLE IF NOT EXISTS notify_channels (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind       TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    targets    TEXT NOT NULL,
+    levels     TEXT NOT NULL DEFAULT 'P1',
+    lang       TEXT NOT NULL DEFAULT 'en',
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    config     TEXT NOT NULL DEFAULT '{}',
+    secret     TEXT NOT NULL DEFAULT '',
+    last_ok_ms INTEGER,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_ms INTEGER NOT NULL,
+    updated_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS notify_outbox (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_key  TEXT NOT NULL,
+    tier       INTEGER NOT NULL,
+    channel_id INTEGER NOT NULL,
+    created_ms INTEGER NOT NULL,
+    next_ms    INTEGER NOT NULL,
+    attempts   INTEGER NOT NULL DEFAULT 0,
+    sent_ms    INTEGER,
+    dropped    TEXT NOT NULL DEFAULT '',
+    error      TEXT NOT NULL DEFAULT '',
+    UNIQUE (alert_key, tier, channel_id)
+);
 -- 商业化 B1c:名单第一版 —— 时段 / 人员授权。
 CREATE TABLE IF NOT EXISTS authorizations (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

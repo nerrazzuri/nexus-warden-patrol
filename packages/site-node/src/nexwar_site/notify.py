@@ -1,0 +1,509 @@
+"""1.1-2 告警推到 WhatsApp / Telegram / 邮件 / webhook(设计 ``docs/1.1-2-告警外发-设计.md``)。
+
+手机 App 推送(:mod:`nexwar_site.push`)之外,再按「渠道」往外发一份:保安主管都在 WhatsApp 上,不用非装
+我们的 App。
+
+- **渠道**(``notify_channels``):管理员在网页「系统」页加。种类 :data:`KINDS`;每个渠道写收件人
+  (Telegram 的 chat id、邮箱、手机号、URL)、发哪几级(默认只 P1,可加 P2)、用哪种语言。机器人令牌、
+  邮箱口令、WhatsApp 令牌、webhook 签名密钥整串加密存(站点 ``secrets.key``);站点没配密钥就不收。
+- **发什么**:只发**文字**:站点名、级别、告警标题(按种类翻译)、哪台机器人、站点时间,和一句「打开
+  Nexus Warden 处理」。**不带照片、不带位置**(同决策 53 的推送;照片要出站点到第三方,以后单独做成
+  选项)。升到下一档还没人确认,再发一次,写「仍未确认」。
+- **怎么发**:告警写库的同一个事务里,每个开着、级别对得上的渠道排一行进
+  ``notify_outbox``(记下了就一定会发);站点循环里单独一条道往外发(:meth:`NotifyDesk.tick`),发不出去退避重试;已经有人确认、解决了的
+  不发;一个小时还没发出去的作废。每个渠道每小时最多发 :data:`HOURLY_CAP` 条(告警风暴不刷爆主管的
+  手机、不烧 WhatsApp 的钱),超了的作废并记原因。
+- **发不出去**连续 :data:`STUCK_MS` 报 **P2**「告警外发发不出去」(``notify_failed``),发出去一条
+  就自动解决。这条 P2 自己不外发(不然渠道坏了自己报自己)。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import logging
+import re
+import smtplib
+import ssl
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Callable
+from datetime import datetime
+from email.message import EmailMessage
+from pathlib import Path
+from typing import Any
+
+from nexwar_site.alert_sources import SITE
+
+log = logging.getLogger(__name__)
+
+KINDS = ("telegram", "whatsapp", "email", "webhook")
+LEVELS = ("P1", "P2")
+LANGS = ("en", "zh")
+#: 这几种告警不外发(渠道坏了不能自己报自己)。
+NEVER = frozenset({"notify_failed", "push_failed"})
+MAX_CHANNELS = 20
+MAX_TARGETS = 10
+#: 多久还没发出去就作废(毫秒)。
+EXPIRE_MS = 3600_000
+#: 发不出去连续这么久报 P2(毫秒)。
+STUCK_MS = 10 * 60_000
+#: 每个渠道每小时最多发几条。
+HOURLY_CAP = 30
+BACKOFF_BASE_S, BACKOFF_MAX_S = 10, 300
+TIMEOUT_S = 10
+TELEGRAM_URL = "https://api.telegram.org/bot{token}/sendMessage"
+WHATSAPP_URL = "https://graph.facebook.com/v21.0/{phone_id}/messages"
+_TITLES = Path(__file__).parent / "i18n" / "alerts.json"
+_PHONE = re.compile(r"^\+?[1-9][0-9]{6,15}$")
+_CHAT = re.compile(r"^(-?[0-9]{1,20}|@[A-Za-z0-9_]{5,32})$")
+_EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$")
+_HOST = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
+_TEMPLATE = re.compile(r"^[a-z0-9_]{1,512}$")
+
+
+class NotifyError(ValueError):
+    """渠道写得不对(接口回 400,原因是给人看的)。"""
+
+
+class SendError(Exception):
+    """这一次没发出去(网络、密钥、对方拒了)。"""
+
+
+# ---------------------------------------------------------------- 正文
+
+
+_catalog: dict[str, dict[str, str]] | None = None
+
+
+def _title(kind: str, lang: str, fallback: str) -> str:
+    global _catalog
+    if _catalog is None:
+        try:
+            _catalog = json.loads(_TITLES.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _catalog = {}
+    t = (_catalog or {}).get(kind)
+    return t.get(lang) or fallback if isinstance(t, dict) else fallback
+
+
+def message(*, site: str, level: str, kind: str, title: str, robot: str, ms: int, tz: Any,
+            tier: int, lang: str) -> dict[str, str]:
+    """一条告警的外发文字:``head``(一行)、``body``(几行)、``when``。"""
+    when = datetime.fromtimestamp(ms / 1000, tz).strftime("%Y-%m-%d %H:%M")
+    name = _title(kind, lang, title) if lang == "en" else (title or _title(kind, "zh", kind))
+    if lang == "zh":
+        again = "(仍未确认)" if tier > 0 else ""
+        head = f"{site or '站点'} · {level}{again}:{name}"
+        lines = [head, f"机器人:{robot}" if robot and robot != SITE else "站点",
+                 f"时间:{when}", "打开 Nexus Warden App 或网页控制台处理。"]
+    else:
+        again = " (still not acknowledged)" if tier > 0 else ""
+        head = f"{site or 'Site'} · {level}{again}: {name}"
+        lines = [head, f"Robot: {robot}" if robot and robot != SITE else "Site",
+                 f"Time: {when}", "Open the Nexus Warden app or web console to handle it."]
+    return {"head": head, "body": "\n".join(lines), "when": when, "name": name}
+
+
+def test_message(site: str, lang: str) -> dict[str, str]:
+    if lang == "zh":
+        head = f"{site or '站点'}:测试消息"
+        return {"head": head, "body": head + "\n收到说明这个告警渠道已配置好。", "when": "",
+                "name": "测试"}
+    head = f"{site or 'Site'}: test message"
+    return {"head": head, "body": head + "\nIf you can read this, the alert channel works.",
+            "when": "", "name": "Test"}
+
+
+# ---------------------------------------------------------------- 渠道
+
+
+def _post_json(url: str, body: dict[str, Any], headers: dict[str, str] | None = None) -> bytes:
+    raw = json.dumps(body, ensure_ascii=False).encode()
+    req = urllib.request.Request(url, data=raw, method="POST",
+                                 headers={"Content-Type": "application/json", **(headers or {})})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r: 
+            return r.read(4096)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(300).decode("utf-8", "replace")
+        raise SendError(f"HTTP {exc.code}:{detail}") from exc
+    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        raise SendError(f"连不上:{exc}") from exc
+
+
+class Sender:
+    """真去发的那一层(测试换成假的)。``ch``:渠道的配置 + 打开了的密钥。"""
+
+    def send(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
+        getattr(self, f"_{ch['kind']}")(ch, msg, alert)
+
+    def _telegram(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
+        url = TELEGRAM_URL.format(token=ch["secret"])
+        for chat in ch["targets"]:
+            _post_json(url, {"chat_id": chat, "text": msg["body"],
+                             "disable_web_page_preview": True})
+
+    def _whatsapp(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
+        # 主动发给人要用 Meta 批过的模板(三个参数:站点 · 级别:告警、机器人、时间)
+        cfg = ch["config"]
+        url = WHATSAPP_URL.format(phone_id=cfg["phone_number_id"])
+        params = [msg["head"], alert.get("robot") or "-", msg["when"] or "-"]
+        for to in ch["targets"]:
+            _post_json(url, {
+                "messaging_product": "whatsapp", "to": to.lstrip("+"), "type": "template",
+                "template": {"name": cfg["template"], "language": {"code": cfg.get("template_lang")
+                                                                    or "en"},
+                             "components": [{"type": "body", "parameters": [
+                                 {"type": "text", "text": p[:200]} for p in params]}]}},
+                headers={"Authorization": f"Bearer {ch['secret']}"})
+
+    def _email(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
+        cfg = ch["config"]
+        m = EmailMessage()
+        m["Subject"] = msg["head"]
+        m["From"] = cfg.get("from") or cfg.get("user")
+        m["To"] = ", ".join(ch["targets"])
+        m.set_content(msg["body"])
+        host, port = cfg["host"], int(cfg.get("port") or 587)
+        sec = cfg.get("security") or "starttls"
+        try:
+            if sec == "ssl":
+                s: smtplib.SMTP = smtplib.SMTP_SSL(host, port, timeout=TIMEOUT_S,
+                                                   context=ssl.create_default_context())
+            else:
+                s = smtplib.SMTP(host, port, timeout=TIMEOUT_S)
+            with s:
+                if sec == "starttls":
+                    s.starttls(context=ssl.create_default_context())
+                if cfg.get("user"):
+                    s.login(cfg["user"], ch["secret"])
+                s.send_message(m)
+        except (smtplib.SMTPException, OSError, TimeoutError) as exc:
+            raise SendError(f"邮件发不出去:{exc}") from exc
+
+    def _webhook(self, ch: dict[str, Any], msg: dict[str, str], alert: dict[str, Any]) -> None:
+        body = {"site": alert.get("site", ""), "alert_key": alert.get("key", ""),
+                "level": alert.get("level", ""), "kind": alert.get("kind", ""),
+                "title": msg["name"], "robot": alert.get("robot", ""),
+                "time_ms": alert.get("ms", 0), "tier": alert.get("tier", 0),
+                "text": msg["body"]}
+        headers = {}
+        if ch.get("secret"):
+            raw = json.dumps(body, ensure_ascii=False).encode()
+            sig = hmac.new(ch["secret"].encode(), raw, hashlib.sha256).hexdigest()
+            headers["X-Nexwar-Signature"] = sig
+        for url in ch["targets"]:
+            _post_json(url, body, headers)
+
+
+# ---------------------------------------------------------------- 排队
+
+
+def enqueue(tx: Any, alert: Any, now_ms: int) -> None:
+    """告警写库的那个事务里调:没确认、没解决的,每个开着、级别对得上的渠道排一行。"""
+    level = getattr(alert.level, "name", str(alert.level))
+    if level not in LEVELS or alert.kind in NEVER \
+            or alert.acked_ms is not None or alert.resolved_ms is not None:
+        return
+    for r in tx.execute("SELECT id, levels FROM notify_channels WHERE enabled=1").fetchall():
+        if level in str(r["levels"]).split(","):
+            tx.execute("INSERT OR IGNORE INTO notify_outbox(alert_key, tier, channel_id, "
+                       "created_ms, next_ms) VALUES (?,?,?,?,?)",
+                       (alert.key, int(alert.escalated), r["id"], now_ms, now_ms))
+
+
+def _clean_targets(kind: str, raw: Any) -> list[str]:
+    if isinstance(raw, str):
+        raw = re.split(r"[,;\s]+", raw)
+    if not isinstance(raw, list):
+        raise NotifyError("收件人要是列表")
+    out = [str(x).strip() for x in raw if str(x).strip()]
+    if not out:
+        raise NotifyError("至少要一个收件人")
+    if len(out) > MAX_TARGETS:
+        raise NotifyError(f"一个渠道最多 {MAX_TARGETS} 个收件人")
+    check = {"telegram": (_CHAT, "Telegram chat id 要是数字(群是负数)或 @频道名"),
+             "whatsapp": (_PHONE, "手机号要带国家码,比如 +60123456789"),
+             "email": (_EMAIL, "邮箱地址不对")}.get(kind)
+    for t in out:
+        if check and not check[0].match(t):
+            raise NotifyError(f"{check[1]}:{t[:60]}")
+        if kind == "webhook":
+            u = urllib.parse.urlparse(t)
+            if u.scheme not in ("https", "http") or not u.hostname:
+                raise NotifyError(f"webhook 地址要是 http(s)://…:{t[:60]}")
+    return out
+
+
+def _clean_config(kind: str, raw: Any) -> dict[str, Any]:
+    cfg = raw if isinstance(raw, dict) else {}
+    if kind == "email":
+        host = str(cfg.get("host") or "").strip()
+        if not _HOST.match(host):
+            raise NotifyError("要填邮件服务器(SMTP)地址")
+        port = cfg.get("port", 587)
+        if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
+            raise NotifyError("端口要是 1–65535")
+        sec = cfg.get("security") or "starttls"
+        if sec not in ("starttls", "ssl", "none"):
+            raise NotifyError("加密方式要是 starttls / ssl / none")
+        user = str(cfg.get("user") or "").strip()[:190]
+        frm = str(cfg.get("from") or user).strip()[:190]
+        if not _EMAIL.match(frm):
+            raise NotifyError("要填发件人邮箱")
+        return {"host": host, "port": port, "security": sec, "user": user, "from": frm}
+    if kind == "whatsapp":
+        pid = str(cfg.get("phone_number_id") or "").strip()
+        if not re.fullmatch(r"[0-9]{5,25}", pid):
+            raise NotifyError("要填 WhatsApp 的 Phone number ID(Meta 后台里的一串数字)")
+        tpl = str(cfg.get("template") or "").strip()
+        if not _TEMPLATE.match(tpl):
+            raise NotifyError("要填 Meta 批过的消息模板名(小写字母、数字、下划线)")
+        tl = str(cfg.get("template_lang") or "en").strip()
+        if not re.fullmatch(r"[a-z]{2,3}(_[A-Z]{2})?", tl):
+            raise NotifyError("模板语言要像 en、en_US、zh_CN")
+        return {"phone_number_id": pid, "template": tpl, "template_lang": tl}
+    return {}
+
+
+class NotifyDesk:
+    def __init__(self, db: Any, *, now_ms: Callable[[], int], sender: Any = None,
+                 site_name: str = "", tz: Callable[[], Any] | None = None) -> None:
+        self.db = db
+        self._now = now_ms
+        self.sender = sender if sender is not None else Sender()
+        self.site_name = site_name
+        self._tz = tz
+        #: 告警台(站点主程序接上):发不出去报 P2。
+        self.alerts: Any = None
+
+    # ------------------------------------------------------------ 渠道增删改
+
+    def _box(self) -> Any:
+        box = getattr(self.db, "sealbox", None)
+        if box is None:
+            raise NotifyError("站点没配密钥(secrets.key),不能存渠道的令牌、口令")
+        return box
+
+    def _row_view(self, r: Any) -> dict[str, Any]:
+        return {"id": r["id"], "kind": r["kind"], "name": r["name"],
+                "targets": json.loads(r["targets"]), "levels": str(r["levels"]).split(","),
+                "lang": r["lang"], "enabled": bool(r["enabled"]),
+                "config": json.loads(r["config"] or "{}"), "has_secret": bool(r["secret"]),
+                "last_ok_ms": r["last_ok_ms"], "last_error": r["last_error"],
+                "updated_ms": r["updated_ms"]}
+
+    def channels(self) -> list[dict[str, Any]]:
+        return [self._row_view(r) for r in self.db.query("SELECT * FROM notify_channels "
+                                                         "ORDER BY id")]
+
+    def view(self) -> dict[str, Any]:
+        recent = [dict(r) for r in self.db.query(
+            "SELECT o.id, o.alert_key, o.tier, o.channel_id, o.created_ms, o.sent_ms, o.dropped, "
+            "o.error, o.attempts, c.name AS channel FROM notify_outbox o "
+            "LEFT JOIN notify_channels c ON c.id = o.channel_id ORDER BY o.id DESC LIMIT 20")]
+        return {"channels": self.channels(), "recent": recent,
+                "sealed": getattr(self.db, "sealbox", None) is not None,
+                "kinds": list(KINDS), "hourly_cap": HOURLY_CAP}
+
+    def save(self, d: dict[str, Any], *, cid: int | None = None) -> dict[str, Any]:
+        """新建(``cid`` 是 ``None``)或改一个渠道。改的时候 ``secret`` 不给 = 不变。"""
+        old = None
+        if cid is not None:
+            rows = self.db.query("SELECT * FROM notify_channels WHERE id=?", (cid,))
+            if not rows:
+                raise KeyError(cid)
+            old = rows[0]
+        kind = old["kind"] if old is not None else d.get("kind")
+        if kind not in KINDS:
+            raise NotifyError(f"种类要是 {' / '.join(KINDS)}")
+        name = str(d.get("name") if "name" in d else (old["name"] if old else "")).strip()
+        if not name or len(name) > 60:
+            raise NotifyError("要起个名字(60 字以内)")
+        targets = _clean_targets(kind, d["targets"] if "targets" in d
+                                 else json.loads(old["targets"]) if old else None)
+        levels = d.get("levels", str(old["levels"]).split(",") if old else ["P1"])
+        if not isinstance(levels, list) or not levels or any(x not in LEVELS for x in levels):
+            raise NotifyError("级别要从 P1、P2 里选,至少一个")
+        lang = d.get("lang", old["lang"] if old else "en")
+        if lang not in LANGS:
+            raise NotifyError("语言要是 en / zh")
+        config = _clean_config(kind, d["config"] if "config" in d
+                               else json.loads(old["config"] or "{}") if old else {})
+        enabled = d.get("enabled", bool(old["enabled"]) if old else True)
+        if not isinstance(enabled, bool):
+            raise NotifyError("enabled 要是 true / false")
+        secret = d.get("secret")
+        if secret is not None and not isinstance(secret, str):
+            raise NotifyError("secret 要是字符串")
+        sealed = old["secret"] if old is not None else ""
+        if secret:
+            if len(secret) > 1000:
+                raise NotifyError("密钥太长")
+            sealed = self._box().seal(secret.strip())
+        if kind in ("telegram", "whatsapp") and not sealed:
+            raise NotifyError("要填" + ("Telegram 机器人令牌(bot token)" if kind == "telegram"
+                                       else "WhatsApp 访问令牌(access token)"))
+        if kind == "email" and config.get("user") and not sealed:
+            raise NotifyError("填了邮箱账号就要填口令")
+        lv = ",".join(x for x in LEVELS if x in levels)
+        now = self._now()
+        with self.db.tx() as c:
+            if old is None:
+                n = c.execute("SELECT COUNT(*) AS n FROM notify_channels").fetchone()["n"]
+                if n >= MAX_CHANNELS:
+                    raise NotifyError(f"最多 {MAX_CHANNELS} 个渠道")
+                cur = c.execute(
+                    "INSERT INTO notify_channels(kind, name, targets, levels, lang, enabled, "
+                    "config, secret, created_ms, updated_ms) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (kind, name, json.dumps(targets), lv, lang, int(enabled), json.dumps(config),
+                     sealed, now, now))
+                cid = int(cur.lastrowid)
+            else:
+                c.execute("UPDATE notify_channels SET name=?, targets=?, levels=?, lang=?, "
+                          "enabled=?, config=?, secret=?, updated_ms=? WHERE id=?",
+                          (name, json.dumps(targets), lv, lang, int(enabled), json.dumps(config),
+                           sealed, now, cid))
+        return self._row_view(self.db.query("SELECT * FROM notify_channels WHERE id=?",
+                                            (cid,))[0])
+
+    def remove(self, cid: int) -> bool:
+        with self.db.tx() as c:
+            n = c.execute("DELETE FROM notify_channels WHERE id=?", (cid,)).rowcount
+            c.execute("UPDATE notify_outbox SET dropped='渠道已删除' WHERE channel_id=? "
+                      "AND sent_ms IS NULL AND dropped=''", (cid,))
+        return bool(n)
+
+    # ------------------------------------------------------------ 发
+
+    def _channel(self, cid: int) -> dict[str, Any] | None:
+        rows = self.db.query("SELECT * FROM notify_channels WHERE id=?", (cid,))
+        if not rows:
+            return None
+        ch = self._row_view(rows[0])
+        ch["secret"] = self._box().open(rows[0]["secret"]) if rows[0]["secret"] else ""
+        return ch
+
+    def _tzinfo(self) -> Any:
+        if self._tz is not None:
+            return self._tz()
+        from nexwar_site.sitetime import site_tz
+        return site_tz(self.db)
+
+    def _robot_name(self, rid: str) -> str:
+        if not rid or rid == SITE:
+            return rid
+        rows = self.db.query("SELECT display_name FROM robots WHERE robot_id=?", (rid,))
+        return (rows[0]["display_name"] if rows else "") or rid
+
+    def send_test(self, cid: int) -> dict[str, Any]:
+        """给这个渠道发一条测试消息(当场发,回成没成)。"""
+        ch = self._channel(cid)
+        if ch is None:
+            raise KeyError(cid)
+        msg = test_message(self.site_name, ch["lang"])
+        try:
+            self.sender.send(ch, msg, {"site": self.site_name, "key": "test", "level": "test",
+                                       "kind": "notify_test", "robot": "", "ms": self._now(),
+                                       "tier": 0})
+        except SendError as exc:
+            self._mark(cid, error=str(exc)[:300])
+            return {"ok": False, "error": str(exc)[:300]}
+        self._mark(cid, ok=True)
+        return {"ok": True, "error": ""}
+
+    def _mark(self, cid: int, *, ok: bool = False, error: str = "") -> None:
+        with self.db.tx() as c:
+            if ok:
+                c.execute("UPDATE notify_channels SET last_ok_ms=?, last_error='' WHERE id=?",
+                          (self._now(), cid))
+            else:
+                c.execute("UPDATE notify_channels SET last_error=? WHERE id=?", (error, cid))
+
+    def _skip(self, row: dict[str, Any], now: int) -> str:
+        if now - row["created_ms"] > EXPIRE_MS:
+            return "一个小时未发出去,作废"
+        a = self.db.query("SELECT acked_ms, resolved_ms FROM alerts WHERE key=?",
+                          (row["alert_key"],))
+        if a and (a[0]["acked_ms"] is not None or a[0]["resolved_ms"] is not None):
+            return "已有人确认或解决了"
+        return ""
+
+    def _drop(self, oid: int, why: str) -> None:
+        with self.db.tx() as c:
+            c.execute("UPDATE notify_outbox SET dropped=? WHERE id=?", (why, oid))
+
+    def tick(self) -> None:
+        """要发的都发出去(要等网络:站点主程序放在线程里跑)。"""
+        now = self._now()
+        rows = [dict(r) for r in self.db.query(
+            "SELECT * FROM notify_outbox WHERE sent_ms IS NULL AND dropped='' AND next_ms<=? "
+            "ORDER BY id LIMIT 50", (now,))]
+        for row in rows:
+            now = self._now()
+            why = self._skip(row, now)
+            if why:
+                self._drop(row["id"], why)
+                continue
+            try:
+                ch = self._channel(row["channel_id"])
+            except Exception as exc:  # noqa: BLE001 - 密钥打不开:这一条发不了,记原因
+                self._drop(row["id"], f"渠道的密钥打不开:{exc}"[:300])
+                continue
+            if ch is None or not ch["enabled"]:
+                self._drop(row["id"], "渠道已删除或停用")
+                continue
+            sent = self.db.query("SELECT COUNT(*) AS n FROM notify_outbox WHERE channel_id=? "
+                                 "AND sent_ms>?", (ch["id"], now - 3600_000))[0]["n"]
+            if sent >= HOURLY_CAP:
+                self._drop(row["id"], f"这个渠道一小时已发 {HOURLY_CAP} 条,这条不发")
+                continue
+            a = self.db.query("SELECT * FROM alerts WHERE key=?", (row["alert_key"],))
+            if not a:
+                self._drop(row["id"], "告警不在了")
+                continue
+            al = a[0]
+            msg = message(site=self.site_name, level=al["level"], kind=al["kind"],
+                          title=al["title"], robot=self._robot_name(al["robot"]),
+                          ms=al["first_ms"], tz=self._tzinfo(), tier=row["tier"], lang=ch["lang"])
+            try:
+                self.sender.send(ch, msg, {"site": self.site_name, "key": al["key"],
+                                           "level": al["level"], "kind": al["kind"],
+                                           "robot": self._robot_name(al["robot"]),
+                                           "ms": al["first_ms"], "tier": row["tier"]})
+            except SendError as exc:
+                err = str(exc)[:300]
+                wait = min(BACKOFF_MAX_S, BACKOFF_BASE_S * 2 ** min(row["attempts"], 10))
+                with self.db.tx() as c:
+                    c.execute("UPDATE notify_outbox SET attempts=attempts+1, next_ms=?, error=? "
+                              "WHERE id=?", (now + wait * 1000, err, row["id"]))
+                self._mark(ch["id"], error=err)
+                log.warning("告警外发(%s)没发出去,%s 秒后再试:%s", ch["name"], wait, err)
+                continue
+            with self.db.tx() as c:
+                c.execute("UPDATE notify_outbox SET sent_ms=?, error='' WHERE id=?",
+                          (self._now(), row["id"]))
+            self._mark(ch["id"], ok=True)
+            log.info("告警外发(%s)发出去了:%s", ch["name"], row["alert_key"])
+        self._stuck(self._now())
+
+    def _stuck(self, now: int) -> None:
+        if self.alerts is None:
+            return
+        oldest = self.db.query("SELECT MIN(created_ms) AS t FROM notify_outbox WHERE "
+                               "sent_ms IS NULL AND dropped='' AND attempts>0")[0]["t"]
+        stuck = oldest is not None and now - oldest >= STUCK_MS
+        open_ = self.alerts.has_open(SITE, "notify_failed")
+        if stuck and not open_:
+            err = self.db.query("SELECT name, last_error FROM notify_channels "
+                                "WHERE last_error!='' ORDER BY updated_ms DESC LIMIT 1")
+            detail = f"{err[0]['name']}:{err[0]['last_error']}" if err else "一直发不出去"
+            self.alerts.raise_alert(kind="notify_failed", robot=SITE,
+                                    title="告警外发发不出去:WhatsApp / Telegram / 邮件收不到",
+                                    detail=detail[:250] + ";看站点能不能上外网、渠道的令牌是否正确")
+        elif not stuck and oldest is None and open_:
+            self.alerts.resolve_all(SITE, "notify_failed", who="site:notify_ok")
+

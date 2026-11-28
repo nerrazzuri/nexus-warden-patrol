@@ -1201,6 +1201,12 @@ class Server:
         self.push.alerts = self._loop_alerts      # 推送在线程里跑:告警经事件循环
         self.alerts.push = bool(senders)
         self.api.push = self.push
+        from nexwar_site.notify import NotifyDesk
+        #: 1.1-2:告警推到 WhatsApp / Telegram / 邮件 / webhook(管理员在「系统」页配渠道)。
+        self.notify = NotifyDesk(self.db, now_ms=wall_ms,
+                                 site_name=str(cfg.get("site_name") or cfg.get("site_id") or ""))
+        self.notify.alerts = self._loop_alerts
+        self.api.notify = self.notify
         from nexwar_site import keyvault
         from nexwar_site.health import HealthDesk
         #: 体检、指标历史、诊断包(商业化 A1)。
@@ -1456,11 +1462,13 @@ class Server:
                                      ("受力警笛", "force", "sound"),      # W26:布防时被抱起来
                                      ("天气", "weather", "tick"),         # W29:雷暴撤排程、对账限速
                                      ("推送", "push", "tick"),            # A6:P1 推到手机
+                                     ("告警外发", "notify", "tick"),      # 1.1-2:WhatsApp 等
                                      ("升级排队", "release_queue", "tick"),   # W44:充完电空闲再换
                                      ("对时", "clock_nudge", "tick")):        # W70:钟偏了发站点时刻
                 try:
                     # 推送是同步的、要等网络:放线程里;别的本来就是协程
-                    self._lane(what, getattr(getattr(self, part), meth), thread=part == "push")
+                    self._lane(what, getattr(getattr(self, part), meth),
+                               thread=part in ("push", "notify"))
                 except Exception:
                     log.exception("%s这一拍没起来", what)
         lanes = [t for t in getattr(self, "_lanes", {}).values() if not t.done()]

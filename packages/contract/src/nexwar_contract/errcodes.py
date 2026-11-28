@@ -82,6 +82,9 @@ _T: tuple[tuple[int, str, str, str, str, str, str, str], ...] = (
      "检查对时(chrony)", "Check time sync (chrony)"),
     (0x010C, "site.account_request", "info", "user", "有人申请账号", "Someone requested an account",
      "到用户页批准或拒绝", "Approve or reject it on the Users page"),
+    (0x010D, "site.notify_failed", "warn", "engineer", "告警外发发不出去(WhatsApp / Telegram / 邮件)",
+     "Alerts could not be sent to WhatsApp / Telegram / email",
+     "到「系统」页看告警渠道的错误;检查外网和令牌", "Check the alert channels on the System page; check internet access and tokens"),
     # ---- 0x02 派单与任务
     (0x0201, "dispatch.offline", "warn", "user", "机器人不在线或很久没上报", "Robot is offline or has not reported recently",
      "看机器人是否开机、网络是否通", "Check the robot is on and connected"),
@@ -293,6 +296,7 @@ ALERT: dict[str, str] = {
     "force_bump": "robot.force_bump", "force_config_bad": "robot.force_config_bad",
     "purged_incoming_stuck": "evidence.purged_incoming_stuck",
     "backup_verify_failed": "site.backup_verify_failed", "push_failed": "site.push_failed",
+    "notify_failed": "site.notify_failed",
     "cert_expiring": "net.cert_expiring", "cert_renew_failed": "net.cert_renew_failed",
     "site_disk_low": "site.disk_low", "lane_stuck": "dispatch.lane_stuck",
     "agent_too_old": "update.agent_too_old", "site_too_old": "site.too_old",
