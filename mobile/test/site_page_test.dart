@@ -427,6 +427,24 @@ class FakeApi implements SiteApi {
   }
   /// 上装（W21）：记在 [calls] 里；[deterAck] 是狗回的回执。
   Map<String, dynamic> deterAck = <String, dynamic>{'result': 'accepted'};
+  /// 1.1-4 按住说话：传上来的录音（字节数、格式）；最近的对讲。
+  final List<(int, String)> talked = <(int, String)>[];
+  List<Map<String, dynamic>> talkList = <Map<String, dynamic>>[];
+  @override
+  Future<Map<String, dynamic>> talk(String robotId, Uint8List audio, String mime) async {
+    talked.add((audio.length, mime));
+    calls.add('talk $robotId');
+    return <String, dynamic>{'ack': deterAck, 'talk': <String, dynamic>{'id': '0123456789abcdef'}};
+  }
+  @override
+  Future<Map<String, dynamic>> listen(String robotId, {int seconds = 10}) async {
+    calls.add('listen $robotId $seconds');
+    return <String, dynamic>{'ack': deterAck, 'talk': <String, dynamic>{'id': 'fedcba9876543210'}};
+  }
+  @override
+  Future<List<Map<String, dynamic>>> talks(String robotId) async => talkList;
+  @override
+  Future<Uint8List> talkAudio(String id) async => Uint8List.fromList(const [82, 73, 70, 70]);
   /// 常用喊话（第三档 #41）；null = 老站点没有这个接口（抛错）。
   List<Map<String, String>>? voicePresetList = <Map<String, String>>[];
   @override

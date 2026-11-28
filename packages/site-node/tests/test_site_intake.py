@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import ssl
 import time
 from pathlib import Path
@@ -648,3 +649,42 @@ def test_W75_关键帧边走边传到站点_清单最后到_站点出图登记_�
     b.run_pending()
     assert {f.name for f in 站点.maps.get("yard", "3").files} == {"floor.pgm"}
     box.close()
+
+
+def _wav(secs=0.2, rate=16000) -> bytes:
+    import io
+    import wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\x10\x00" * int(rate * secs))
+    return buf.getvalue()
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="要 ffmpeg")
+async def test_1_1_4_机器人从狗专用口拉按住说话的录音_转成48k双声道_别的狗拉不到_回话传回来(
+        站点, ca, tmp_path):
+    import wave
+
+    from nexwar_agent.talk import TalkError, TalkLink
+    from nexwar_site.talk import TalkDesk
+    desk = TalkDesk(站点.db, tmp_path / "talk", now_ms=lambda: NOW)
+    站点.intake.talk = desk
+    out = desk.save_out("A", "gina", _wav(), "audio/wav")
+    link_a = TalkLink(站点.intake.url, _ctx(ca, ca.a), tmp_path / "dogA")
+    got = await link_a.fetch(f"talk:{out['id']}")
+    with wave.open(str(got)) as w:
+        assert (w.getframerate(), w.getnchannels(), w.getsampwidth()) == (48000, 2, 2)
+    assert desk.get(out["id"])["state"] == "fetched"
+    link_b = TalkLink(站点.intake.url, _ctx(ca, ca.b), tmp_path / "dogB")
+    with pytest.raises(TalkError, match="HTTP 404"):
+        await link_b.fetch(f"talk:{out['id']}")
+    want = desk.want_reply("A", "gina")
+    with pytest.raises(TalkError, match="HTTP 404"):
+        await link_b.upload(f"talk:{want['id']}", _wav())
+    await link_a.upload(f"talk:{want['id']}", _wav())
+    assert desk.get(want["id"])["state"] == "recorded"
+    data, mime = desk.audio(want["id"])
+    assert mime == "audio/wav" and data == _wav()

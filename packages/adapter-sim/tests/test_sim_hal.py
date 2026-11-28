@@ -51,7 +51,7 @@ async def test_能力声明与入口一致(台子):
     assert caps.sensing == {"lidar": False, "depth": False, "thermal": False, "imu": False,
                             "imu_hz": 0, "joint_effort": False, "foot_force": False}
     assert caps.actuators == {"light": False, "strobe": False, "siren": False, "speaker": False,
-                              "spotlight": False, "head": False}
+                              "spotlight": False, "head": False, "mic": False}
     for call in (r.imu(), r.lidar(), r.ultrasonic(), r.joints(), r.contacts(), r.depth(),
                  r.thermal(), r.audio_session(), r.recharge_start(), r.recharge_stop(), r.undock(),
                  r.recharge_status(), r.light("front", True), r.strobe("front", "x", 1.0),

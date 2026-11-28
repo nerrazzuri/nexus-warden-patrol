@@ -50,7 +50,7 @@ async def test_能力里报接了哪几路_能放哪些话术(tmp_path):
                  # W40:仿真上装是 V1.2 那套
                  "spotlight_sides": ["left", "right"],
                  "strobe_colors": ["red", "yellow", "green", "blue", "white"],
-                 "strobe_default": "red", "siren_via": "speaker"}
+                 "strobe_default": "red", "siren_via": "speaker", "talk": False}
     await rt.close()
 
 
@@ -707,4 +707,64 @@ async def test_真机1125_站点说放不放跟人有关的自动话术_能力�
     await rt._on_cmd(_cmd("auto_voice", {"person": "yes"}, "v2", c))
     await broker.drain()
     assert ears.by["cmd/ack"][-1]["result"] == "rejected"
+    await rt.close()
+
+
+class _假链路:
+    def __init__(self, tmp_path, *, fail=""):
+        self.tmp, self.fail, self.up = tmp_path, fail, []
+
+    async def fetch(self, clip):
+        if self.fail:
+            raise RuntimeError(self.fail)
+        p = self.tmp / f"talk-{clip[5:]}.wav"
+        p.write_bytes(b"RIFF")
+        return p
+
+    async def upload(self, clip, data):
+        if self.fail:
+            raise RuntimeError(self.fail)
+        self.up.append((clip, data[:4]))
+
+
+async def test_1_1_4_接了站点的录音才报talk和mic_放录音先拉再放_听回话录了传回去(tmp_path):
+    broker, c, ears, dog, rt = await _台(tmp_path)
+    tid = "0123456789abcdef"
+    sp = {"output": "speaker", "on": True, "max_s": 35, "clip": f"talk:{tid}", "priority": 60}
+    ack = await _发(rt, broker, ears, sp, "t0", c)
+    assert ack["result"] == "rejected" and ack["reason"] == "unsupported", "没接站点不认 talk:"
+    mic = {"output": "mic", "on": True, "max_s": 5, "clip": f"talk:{tid}"}
+    assert (await _发(rt, broker, ears, mic, "t1", c))["reason"] == "unsupported"
+    rt.deter.talk = link = _假链路(tmp_path)
+    caps = rt.deter.caps()
+    assert caps["talk"] is True and "mic" in caps["outputs"]
+    ack = await _发(rt, broker, ears, sp, "t2", c)
+    assert ack["result"] == "accepted", ack
+    assert dog.deter_clip == f"talk:{tmp_path}/talk-{tid}.wav"
+    ack = await _发(rt, broker, ears, mic, "t3", c)
+    assert ack["result"] == "accepted", ack
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert link.up == [(f"talk:{tid}", b"RIFF")] and dog.recorded_s == 5.0
+    await _跑(rt, broker, n=2, r=dog, c=c)
+    ev = _事件(ears)
+    assert {"task_id": "deter-t3", "output": "mic", "on": False, "ended": "done",
+            "clip": f"talk:{tid}"} in ev
+    await rt.close()
+
+
+async def test_1_1_4_拉不下来回设备的错_传不上记一条失败(tmp_path):
+    broker, c, ears, dog, rt = await _台(tmp_path)
+    rt.deter.talk = _假链路(tmp_path, fail="站点不给这段录音(HTTP 404)")
+    ack = await _发(rt, broker, ears, {"output": "speaker", "on": True, "max_s": 35,
+                                       "clip": "talk:0123456789abcdef", "priority": 60}, "f1", c)
+    assert ack["result"] == "rejected" and "HTTP 404" in ack["reason"], ack
+    ack = await _发(rt, broker, ears, {"output": "mic", "on": True, "max_s": 5,
+                                       "clip": "talk:0123456789abcdef"}, "f2", c)
+    assert ack["result"] == "accepted"
+    for _ in range(5):
+        await asyncio.sleep(0)
+    await _跑(rt, broker, n=2, r=dog, c=c)
+    [e] = [e for e in _事件(ears) if e.get("ended") == "failed" and e["output"] == "mic"]
+    assert "HTTP 404" in e["reason"]
     await rt.close()

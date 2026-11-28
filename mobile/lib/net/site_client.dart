@@ -963,6 +963,15 @@ abstract class SiteApi {
   /// [alert]：从哪条报警的详情里点的（易用性 37 场景测试：站点记进那条报警的经过）。
   Future<Map<String, dynamic>> deter(String robotId, String output, bool on,
       {double? maxS, String? clip, String? side, String? color, double? pan, double? tilt, String? alert});
+  /// 1.1-4 按住说话：录好的一段（[mime] 如 `audio/mp4`）整个传给站点，站点让机器人放。
+  /// 回 `{ack, talk}`；机器人软件太老（能力里没 `talk`）抛 [SiteError] 409。
+  Future<Map<String, dynamic>> talk(String robotId, Uint8List audio, String mime);
+  /// 1.1-4 听回话：请机器人录 [seconds] 秒现场声音传回站点。回 `{ack, talk}`。
+  Future<Map<String, dynamic>> listen(String robotId, {int seconds = 10});
+  /// 1.1-4 最近的对讲：`[{id, direction(out|in), account, created_ms, state, bytes, error}]`。
+  Future<List<Map<String, dynamic>>> talks(String robotId);
+  /// 1.1-4 一段录音的字节（自己说的、机器人录回来的）。
+  Future<Uint8List> talkAudio(String id);
   /// 常用喊话（第三档 #41，`GET /api/voice-presets`）：`[{lang, text}]`，点一下按 `tts:<lang>:<text>` 念。
   /// 老站点没有这个接口抛 [SiteError]。
   Future<List<Map<String, String>>> voicePresets();
@@ -2234,6 +2243,50 @@ class SiteClient implements SiteApi {
   @override
   Future<Map<String, dynamic>> deterStart(String robotId) async => _map(await _send(
       'POST', '/api/deterrence/${Uri.encodeComponent(robotId)}/start', <String, dynamic>{}));
+
+  @override
+  Future<Map<String, dynamic>> talk(String robotId, Uint8List audio, String mime) => _wrapped(() async {
+        final req = await _io
+            .openUrl('POST', base.resolve('/api/robots/${Uri.encodeComponent(robotId)}/talk'))
+            .timeout(timeout);
+        req.followRedirects = false;
+        final tok = session?.token;
+        if (tok != null) req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $tok');
+        req.headers.contentType = ContentType.parse(mime);
+        req.contentLength = audio.length;
+        req.add(audio);
+        final resp = await req.close().timeout(const Duration(seconds: 30));
+        final raw = await utf8.decodeStream(resp).timeout(timeout);
+        Map<String, dynamic> d;
+        try {
+          final j = jsonDecode(raw.isEmpty ? '{}' : raw);
+          d = j is Map ? j.cast<String, dynamic>() : <String, dynamic>{};
+        } on FormatException {
+          d = <String, dynamic>{};
+        }
+        if (resp.statusCode != 200) {
+          throw SiteError(resp.statusCode,
+              (d['error'] ?? tr('Sending failed (${resp.statusCode})', '发送失败（${resp.statusCode}）')).toString());
+        }
+        return d;
+      });
+
+  @override
+  Future<Map<String, dynamic>> listen(String robotId, {int seconds = 10}) async => _map(await _send(
+      'POST', '/api/robots/${Uri.encodeComponent(robotId)}/listen', <String, dynamic>{'seconds': seconds}));
+
+  @override
+  Future<List<Map<String, dynamic>>> talks(String robotId) async {
+    final d = _map(await _send('GET', '/api/robots/${Uri.encodeComponent(robotId)}/talks'));
+    return <Map<String, dynamic>>[
+      for (final t in (d['talks'] as List?) ?? const <dynamic>[])
+        if (t is Map) t.cast<String, dynamic>(),
+    ];
+  }
+
+  @override
+  Future<Uint8List> talkAudio(String id) =>
+      _bytes('/api/talk/${Uri.encodeComponent(id)}', 4 * 1024 * 1024, tr('Recording', '录音'));
 
   @override
   Future<List<Map<String, String>>> voicePresets() async {

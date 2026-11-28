@@ -1218,6 +1218,11 @@ class Server:
                                  site_name=str(cfg.get("site_name") or cfg.get("site_id") or ""))
         self.notify.alerts = self._loop_alerts
         self.api.notify = self.notify
+        from nexwar_site.talk import TalkDesk
+        #: 1.1-4:按住说话、听回话的录音(留一天)。
+        self.talk = TalkDesk(self.db, home / "talk", now_ms=wall_ms)
+        self.api.talk = self.talk
+        self.intake.talk = self.talk
         from nexwar_site import keyvault
         from nexwar_site.health import HealthDesk
         #: 体检、指标历史、诊断包(商业化 A1)。
@@ -1465,6 +1470,7 @@ class Server:
                                      ("看见人", "sightings", "tick"),            # W33
                                      ("受力", "force", "reconcile"),             # W26
                                      ("证据没封", "evidence_watch", "tick"),     # W30b
+                                     ("录音到点删", "talk", "prune"),            # 1.1-4
                                      ("版本", "compat", "tick"),                 # A7
                                      ("证书续签", "cert_renewer", "tick"),        # W55
                                      ("临时撤防到点退回", "arming", "tick"),         # W20

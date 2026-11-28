@@ -1196,6 +1196,9 @@ class Dispatcher:
                               else f"{robot_id} 的聚光灯不分左右")
         if req.color and req.color not in caps.get("strobe_colors", []):
             raise Unsupported(f"{robot_id} 的警灯没有 {req.color} 色")
+        if req.clip.startswith("talk:") and req.output == "speaker" and not caps.get("talk"):
+            # 1.1-4:老代理不认 talk:,按能力在这里挡
+            raise Unsupported(f"{robot_id} 的版本放不了按住说话的录音(要升级机器人软件)")
         if req.on and not self._fresh(c):
             raise DispatchRefused(f"{robot_id} 不在线或状态不新鲜")
         if req.on:

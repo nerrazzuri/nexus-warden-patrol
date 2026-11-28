@@ -30,6 +30,8 @@
 	     No App Transport Security exception: every site connection goes through dart:io HttpClient
 	     (pinned self-signed cert, mobile/lib/net/site_client.dart), which ATS does not cover;
 	     recordings are downloaded first and played from a local file. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Hold to talk: your voice is played through the robot's speaker.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Nexus Warden uses the camera only to scan the site pairing QR code.</string>
 	<key>NSLocalNetworkUsageDescription</key>

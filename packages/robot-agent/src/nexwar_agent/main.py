@@ -664,6 +664,14 @@ def build(args: argparse.Namespace) -> Assembled:
                                persons_key=_persons_key(args),
                                persons_peer=args.persons_peer)
         runtime.evidence_sealed = sealer is not None   # W30b:能力里报,没封站点报 P2
+        if args.intake is not None and args.tls_cert:   # 1.1-4:按住说话、听回话跟站点搬录音
+            import ssl as _ssl
+
+            from nexwar_agent.talk import TalkLink
+            tctx = _ssl.create_default_context(cafile=args.tls_ca)
+            tctx.load_cert_chain(args.tls_cert, args.tls_key)
+            runtime.deter.talk = TalkLink(args.intake, tctx, Path(args.store_dir) / "talk",
+                                          ffmpeg=os.environ.get("NEXWAR_FFMPEG", "ffmpeg"))
         if args.tls_cert:
             runtime.tls_cert = Path(args.tls_cert)       # 工单 9:能力里报在用证书哪天到期
         if runtime.devices is not None:                 # W40:设备健康补上盘、网络设备

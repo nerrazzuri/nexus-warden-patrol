@@ -2119,6 +2119,16 @@ input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
 .rc-say { display: grid; grid-template-columns: 120px minmax(0, 1fr) 96px 96px; gap: var(--sp-2); }
 .rc-say .btn { justify-content: center; }
 .rc-deter-body { flex-direction: row; flex-wrap: wrap; }
+/* 1.1-4 远程喊话 */
+.tk { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.tk-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.tk-hold { min-width: 200px; min-height: 48px; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+.tk-hold.is-rec { color: var(--c-error); border: 1px solid var(--c-error); background: var(--c-errorSoft); }
+.tk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tk-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--sp-2); min-width: 0; }
+.tk-who { font-weight: 600; }
+.tk-list audio { height: 32px; max-width: 100%; }
+@media (max-width: 599px) { .tk-hold { flex: 1 1 100%; } }
 .rc-deter-body .btn, .rc-deter-body select { min-width: 112px; justify-content: center; }
 .rc-side { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 .rc-side > .rc-sec:first-child { border-top: 0; }

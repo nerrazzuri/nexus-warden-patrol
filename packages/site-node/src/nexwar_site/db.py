@@ -520,6 +520,18 @@ CREATE TABLE IF NOT EXISTS face_book (
     n          INTEGER NOT NULL,
     updated_ms INTEGER NOT NULL
 );
+-- 1.1-4 远程喊话:按住说话(out)、听回话(in)的录音;文件在 <home>/talk/,留一天。
+CREATE TABLE IF NOT EXISTS talk_clips (
+    id         TEXT PRIMARY KEY,
+    robot      TEXT NOT NULL,
+    direction  TEXT NOT NULL,
+    account    TEXT NOT NULL DEFAULT '',
+    ext        TEXT NOT NULL,
+    bytes      INTEGER NOT NULL DEFAULT 0,
+    created_ms INTEGER NOT NULL,
+    state      TEXT NOT NULL,
+    error      TEXT NOT NULL DEFAULT ''
+);
 -- 1.1-2 告警外发:WhatsApp / Telegram / 邮件 / webhook 渠道(令牌、口令整串加密)。
 CREATE TABLE IF NOT EXISTS notify_channels (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

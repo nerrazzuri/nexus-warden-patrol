@@ -53,7 +53,9 @@ export interface RobotCard {
 }
 export interface Deter { outputs: string[]; max_s: number; tts: boolean; clips: string[];
   /** 第三档 #41:能念哪几种语言(竞品只会中文;英文靠 Orin 上合成)。没报 = 不知道,不挡。 */
-  tts_langs?: string[] }
+  tts_langs?: string[];
+  /** 1.1-4:能放按住说话录的那一段(代理接了站点的录音口)。 */
+  talk?: boolean }
 export const STROBE_S = [30, 60, 120, 300];
 export const CLIP_KEY: Record<string, "clip_blocked" | "clip_passing" | "clip_distance" | "clip_restricted"> = {
   blocked: "clip_blocked", passing: "clip_passing", distance: "clip_distance", restricted: "clip_restricted",

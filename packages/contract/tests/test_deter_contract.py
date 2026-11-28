@@ -72,3 +72,19 @@ def test_POC_云台不用带max_s_角度按度():
 def test_POC_云台雨刷写错就拒(p):
     with pytest.raises(ContractError):
         parse_deter(p)
+
+
+def test_1_1_4_喇叭放站点的录音_听回话要编号和不超过20秒():
+    r = parse_deter({"output": "speaker", "on": True, "max_s": 35, "clip": "talk:0123456789abcdef"})
+    assert r.clip == "talk:0123456789abcdef"
+    m = parse_deter({"output": "mic", "on": True, "max_s": 10, "clip": "talk:0123456789abcdef"})
+    assert m.to_payload() == {"output": "mic", "on": True, "max_s": 10.0,
+                              "clip": "talk:0123456789abcdef"}
+    for bad in ({"output": "mic", "on": True, "max_s": 21, "clip": "talk:0123456789abcdef"},
+                {"output": "mic", "on": True, "max_s": 5, "clip": "warn-zh"},
+                {"output": "mic", "on": True, "max_s": 5},
+                {"output": "mic", "on": True, "max_s": 5, "clip": "talk:0123456789abcdef",
+                 "priority": 50},
+                {"output": "speaker", "on": True, "max_s": 5, "clip": "talk:XYZ"}):
+        with pytest.raises(ContractError):
+            parse_deter(bad)

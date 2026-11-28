@@ -451,11 +451,24 @@ class SimRobot:
         self._deter("siren", on, max_s)
 
     async def sound(self, clip_or_tts: str, max_s: float) -> None:
-        if self.payload and clip_or_tts and not clip_or_tts.startswith("tts:") \
+        if self.payload and clip_or_tts and not clip_or_tts.startswith(("tts:", "talk:")) \
                 and clip_or_tts not in self.clips:
             raise ValueError(f"没有这段话术: {clip_or_tts}")
         self._deter("speaker", bool(clip_or_tts), max_s)
         self.deter_clip = clip_or_tts if clip_or_tts else ""
+
+    async def record(self, max_s: float) -> bytes:
+        """1.1-4 听回话:仿真麦克风录一段(静音 wav,长度按秒算)。"""
+        import io
+        import wave
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(16000)
+            w.writeframes(b"\0\0" * int(16000 * min(max_s, 1.0)))
+        self.recorded_s = max_s
+        return buf.getvalue()
 
     def sound_clips(self) -> tuple[str, ...]:
         return self.clips
@@ -578,4 +591,5 @@ class SimRobot:
                      "imu_hz": 20 if self._imu_on else 0, "joint_effort": False,
                      "foot_force": False},
             actuators={"light": False, "strobe": self.payload, "siren": self.payload,
-                       "speaker": self.payload, "spotlight": self.payload, "head": False})
+                       "speaker": self.payload, "spotlight": self.payload, "head": False,
+                       "mic": self.payload})

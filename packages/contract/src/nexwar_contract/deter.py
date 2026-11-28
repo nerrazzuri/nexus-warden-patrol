@@ -7,7 +7,10 @@
 - ``output``:``strobe`` 警灯、``siren`` 警笛、``spotlight`` 聚光灯、``speaker`` 喇叭、
   ``light`` 机器人本体的前后灯(真机 11-20:路线开的灯原来网页、App 关不掉)。
 - ``on``:开还是关。关不带 ``max_s``。
-- ``clip``:只给喇叭,话术名(``[A-Za-z0-9_.-]``)或 ``tts:<语言>:<文字>``。
+- ``clip``:只给喇叭,话术名(``[A-Za-z0-9_.-]``)或 ``tts:<语言>:<文字>``;1.1-4 起还可以是
+  ``talk:<16 位十六进制>``(保安按住说话录的那一段,站点存着,狗从狗专用口 ``/talk/<编号>`` 拉下来放)。
+- 1.1-4 ``mic``(听回话):开要带 ``max_s``(最多 :data:`LISTEN_MAX_S` 秒)和 ``clip`` = ``talk:<编号>``
+  (录下来按这个编号传回站点 ``/talk/<编号>``);狗在 ``outputs`` 里报 ``mic`` 才认。
 - ``priority``:只给喇叭(0–100)。正在放的比它高,这一条回 ``busy``;一样高或更高的打断正在放的。
   关喇叭不看优先级:让它安静永远可以。
 - ``side``(W40,可选,只给聚光灯):``both``(缺省)、``left``、``right``。上装 V1.2 有左右两只灯;
@@ -28,13 +31,17 @@ from typing import Any
 
 from nexwar_contract.errors import ContractError
 
-OUTPUTS = ("strobe", "siren", "spotlight", "speaker", "wiper", "ptz", "light")
+OUTPUTS = ("strobe", "siren", "spotlight", "speaker", "wiper", "ptz", "light", "mic")
 #: POC 11-06(只在竞品分支):竞品云台 ``ptz`` 转到 ``pan``(水平,度,正 = 向右)、``tilt``(俯仰,度,
 #: 正 = 向下);不带 ``max_s``(转过去就停在那)。雨刷 ``wiper`` 跟警灯一样开、到点关。
 PAN_MAX, TILT_MAX = 180.0, 90.0
 #: 一次最长开这么久;再长要再下一条(站点那头的人得还在)。
 MAX_S = 600.0
 MAX_TTS_CHARS = 300
+#: 1.1-4:听回话一次最多录这么久(秒)。
+LISTEN_MAX_S = 20.0
+#: 1.1-4:站点存着的一段录音(按住说话、回话)。
+TALK = re.compile(r"talk:[0-9a-f]{16}")
 _CLIP = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}")
 _TTS = re.compile(r"tts:[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})?:.+", re.S)
 SIDES = ("both", "left", "right")
@@ -64,6 +71,8 @@ class DeterRequest:
         if self.output == "speaker" and self.on:
             d["clip"] = self.clip
             d["priority"] = self.priority
+        if self.output == "mic" and self.on:
+            d["clip"] = self.clip
         if self.output in ("spotlight", "light") and self.side != "both":
             d["side"] = self.side
         if self.output == "strobe" and self.on and self.color:
@@ -105,13 +114,21 @@ def parse_deter(p: Any) -> DeterRequest:
     if isinstance(ms, bool) or not isinstance(ms, (int, float)) or not math.isfinite(ms) \
             or not 0 < ms <= MAX_S:
         raise ContractError(f"deter: 开要带 max_s(0–{MAX_S:.0f} 秒)")
+    if out == "mic":
+        clip = p.get("clip")
+        if "priority" in p or not isinstance(clip, str) or not TALK.fullmatch(clip) \
+                or ms > LISTEN_MAX_S:
+            raise ContractError(
+                f"deter: 听回话要 clip=talk:<编号>、max_s 不超过 {LISTEN_MAX_S:g} 秒")
+        return DeterRequest(output="mic", on=True, max_s=float(ms), clip=clip)
     if out != "speaker":
         if "clip" in p or "priority" in p:
             raise ContractError("deter: 只有喇叭带 clip、priority")
         return DeterRequest(output=out, on=True, max_s=float(ms), side=side, color=color)
     clip, prio = p.get("clip"), p.get("priority", 50)
     if not isinstance(clip, str) or not (
-            _CLIP.fullmatch(clip) or (_TTS.fullmatch(clip) and len(clip.split(":", 2)[2].strip())
+            _CLIP.fullmatch(clip) or TALK.fullmatch(clip)
+            or (_TTS.fullmatch(clip) and len(clip.split(":", 2)[2].strip())
                                       and len(clip.split(":", 2)[2]) <= MAX_TTS_CHARS)):
         raise ContractError("deter: clip 要是话术名,或 tts:<语言>:<文字>(1–300 字)")
     if isinstance(prio, bool) or not isinstance(prio, int) or not 0 <= prio <= 100:

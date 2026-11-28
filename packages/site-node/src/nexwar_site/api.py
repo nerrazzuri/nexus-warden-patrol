@@ -178,7 +178,10 @@ _ALERT = re.compile(r"^/api/alerts/([^/]{1,256})/"
                     r"(ack|arrive|resolve|reopen|shelve|unshelve|backup)$")
 #: W00c5c:``/api/robots/<id>/teleop``(WebSocket)与 ``/api/robots/<id>/halt``。
 _TELEOP = re.compile(r"^/api/robots/([^/]{1,64})/"
-                     r"(teleop|halt|resume|supervise|relocalize|home/here|deter|service|posture)$")
+                     r"(teleop|halt|resume|supervise|relocalize|home/here|deter|service|posture"
+                     r"|talk|listen|talks)$")
+#: 1.1-4:一段录音(给人听)。
+_TALK_CLIP = re.compile(r"^/api/talk/([0-9a-f]{16})$")
 #: W00c5b:``/api/robots/<id>/video/<front|back|health>``。
 _VIDEO = re.compile(r"^/api/robots/([^/]{1,64})/video/([a-z]{1,16})$")
 #: W00c5d:运行记录与导出。
@@ -390,6 +393,7 @@ class SiteApi:
         self.faces: Any = None                            # 1.1-1 认出保安
         self.notify: Any = None                           # 1.1-2 告警外发
         self.alarm_in: Any = None                         # 1.1-3 报警输入
+        self.talk: Any = None                             # 1.1-4 远程喊话
         #: W73:防区的查看点、值守位(``guard_plan.ZonePosts``;第一次用时按防区、路线库的规划现建)。
         self._zone_posts: Any = None
         self._marks: Any = None
@@ -884,6 +888,9 @@ class _Handler(TlsHandlerMixin):
             m = _AUTHZ.match(path)
             if m is not None:
                 return self._authz(method, m.group(1), user, m.group(2))
+            m = _TALK_CLIP.match(path)
+            if m is not None and method == "GET":
+                return self._talk_audio(m.group(1), user)      # 1.1-4:听一段录音
             m = _NOTIFY.match(path)
             if m is not None:
                 return self._notify(method, int(m.group(1)) if m.group(1) else None,
@@ -1098,6 +1105,8 @@ class _Handler(TlsHandlerMixin):
                     return self._relocalize(robot_id, user)
                 if m.group(2) == "deter" and method == "POST":
                     return self._deter(robot_id, user)
+                if m.group(2) in ("talk", "listen", "talks"):
+                    return self._talk(robot_id, m.group(2), method, user)   # 1.1-4
                 if m.group(2) == "posture" and method == "POST":
                     return self._posture(robot_id, user)
                 if m.group(2) == "home/here" and method == "POST":
@@ -3826,6 +3835,79 @@ class _Handler(TlsHandlerMixin):
                 and ack.get("result") in ("accepted", "duplicate"):
             self._note_warning(alert_key, robot_id, str(d.get("output")), str(user))
         return self._send_json(200, r)
+
+    def _talk(self, robot_id: str, what: str, method: str, user) -> None:
+        """1.1-4 远程喊话:``POST …/talk``(请求体就是录音文件,``Content-Type`` 写格式)存下、让机器人
+        放;``POST …/listen`` ``{seconds?}`` 让机器人录一段回话传回来;
+        ``GET …/talks`` 最近的对讲记录。
+        说、听回话要 ``dispatch``(保安、管理员);看记录 ``view``。"""
+        from nexwar_site.priorities import MANUAL
+        from nexwar_site.talk import LISTEN_SECONDS, MAX_BYTES, MAX_SECONDS, TalkError
+        desk = self.site.talk
+        if desk is None:
+            raise HttpError(404, "此站点未启用远程喊话")
+        self._registered(robot_id)
+        if what == "talks":
+            if method != "GET":
+                raise HttpError(405, "只支持 GET")
+            self._need(user, VIEW)
+            return self._send_json(200, {"talks": desk.list(robot_id)})
+        if method != "POST":
+            raise HttpError(405, "只支持 POST")
+        self._need(user, DISPATCH)
+        self._audit_target = robot_id
+        if what == "talk":
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError as exc:
+                raise HttpError(400, "Content-Length 不是数") from exc
+            if n <= 0:
+                raise HttpError(400, "没有录到声音")
+            if n > MAX_BYTES:
+                raise HttpError(413, f"录音太长(最多 {MAX_SECONDS} 秒)")
+            data = self._read(n)
+            try:
+                clip = desk.save_out(robot_id, str(user), data,
+                                     self.headers.get("Content-Type") or "")
+            except TalkError as exc:
+                raise HttpError(400, str(exc)) from exc
+            d = {"output": "speaker", "on": True, "max_s": float(MAX_SECONDS + 5),
+                 "clip": f"talk:{clip['id']}"}
+        else:
+            body = self._body()
+            secs = body.get("seconds", LISTEN_SECONDS)
+            if isinstance(secs, bool) or not isinstance(secs, int) or not 3 <= secs <= 20:
+                raise HttpError(400, "seconds 要是 3–20 的整数")
+            clip = desk.want_reply(robot_id, str(user))
+            d = {"output": "mic", "on": True, "max_s": float(secs), "clip": f"talk:{clip['id']}"}
+        self._audit_detail = {"talk": clip["id"], "what": what, "bytes": clip["bytes"]}
+        try:
+            r = self.site.dispatch(lambda: self.site.dispatcher.deter(
+                robot_id, d, issued_by=str(user), priority=MANUAL))
+        except HttpError as exc:
+            desk.mark(clip["id"], "refused", str(exc))
+            raise
+        ack = r.get("ack") if isinstance(r, dict) else None
+        ok = isinstance(ack, dict) and ack.get("result") in ("accepted", "duplicate")
+        if not ok:
+            desk.mark(clip["id"], "refused", str((ack or {}).get("reason") or "机器人没接"))
+        elif what == "talk":
+            desk.mark(clip["id"], "sent")
+        return self._send_json(200, {**(r if isinstance(r, dict) else {}),
+                                     "talk": desk.get(clip["id"])})
+
+    def _talk_audio(self, tid: str, user) -> None:
+        """1.1-4 ``GET /api/talk/<编号>``:听一段(自己说的、机器人录回来的)。``view``;进审计。"""
+        desk = self.site.talk
+        if desk is None:
+            raise HttpError(404, "此站点未启用远程喊话")
+        self._need(user, VIEW)
+        try:
+            data, mime = desk.audio(tid)
+        except KeyError as exc:
+            raise HttpError(404, "没有这段录音(只留一天)") from exc
+        self._audit_view(f"talk/{tid}")
+        return self._send_bytes(data, mime)
 
     def _note_warning(self, key: str, robot_id: str, output: str, who: str) -> None:
         """报警的现场里 ``warnings`` 追加一条 ``{at_ms, output, by, robot}``(最多留 20 条);

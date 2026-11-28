@@ -867,3 +867,35 @@ async def test_真机1120_P08_音量缺省就调竞品声卡1的DACL和DACR到70
     with pytest.raises(PayloadError):
         AnbotConfig.from_dict({"master": "http://127.0.0.1:1/", "host": "127.0.0.1",
                                "volume_control": "DACL,DACR;reboot"})
+
+
+async def test_1_1_4_放按住说话的录音走同一条ssh_aplay_配了录音设备才报mic_录音ssh_arecord(
+        master, tmp_path):
+    ssh, log, got = _假ssh(tmp_path, sleep=0.05)
+    ends: list = []
+    p = AnbotPayload(_cfg(master.url, ssh=str(ssh), audio_host="firefly@192.168.113.101"))
+    p.on_sound_end = lambda ok, why: ends.append((ok, why))
+    wav = tmp_path / "talk" / "talk-0123456789abcdef.wav"
+    wav.parent.mkdir()
+    wav.write_bytes(b"RIFFtalk")
+    await p.sound(f"talk:{wav}", 35)
+    await _等(lambda: ends)
+    assert got.read_bytes() == b"RIFFtalk"
+    assert "aplay -q -D dmix_oneway_play -" in log.read_text()
+    with pytest.raises(PayloadError):
+        await p.sound(f"talk:{tmp_path}/etc.wav", 35)
+    assert not p.has("mic")
+    await p.close()
+    rec = tmp_path / "rec"
+    rec.write_text("#!/bin/sh\n"
+                   f'echo "$@" >> "{tmp_path}/rec.log"\n'
+                   "printf 'RIFF'; head -c 100 /dev/zero\n")
+    rec.chmod(0o755)
+    m = AnbotPayload(_cfg(master.url, ssh=str(rec), audio_host="firefly@192.168.113.101",
+                          arecord_device="plughw:1,0"))
+    assert m.has("mic")
+    data = await m.record(5)
+    assert data.startswith(b"RIFF") and len(data) == 104
+    assert "arecord -q -D plughw:1,0 -f S16_LE -r 16000 -c 1 -d 5 -t wav" in \
+        (tmp_path / "rec.log").read_text()
+    await m.close()

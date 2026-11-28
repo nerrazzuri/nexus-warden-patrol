@@ -42,6 +42,8 @@ class DeterDesk:
         self._sound: tuple[int, float] | None = None
         #: 外审:喇叭的仲裁(看优先级 → 起播 / 关 → 记下)一把锁做完,自动播报和手动喊话、关喇叭不交错
         self._speaker_lock = asyncio.Lock()
+        #: 1.1-4:跟站点搬录音(``talk.TalkLink``);没接(没有狗专用口)就不认 ``talk:``、``mic``。
+        self.talk: Any = None
         #: 本体灯开着到点关(``max_s``):哪一路 → 关灯的那个任务
         self._light_off: dict[str, asyncio.Task[None]] = {}
         #: 喇叭放完、放坏了、到点了(W21 外审):HAL 回调过来,当场放开优先级、记一条事件。
@@ -65,7 +67,8 @@ class DeterDesk:
 
     def outputs(self) -> list[str]:
         acts = self.hal.hal_capabilities().actuators
-        return [o for o in OUTPUTS if acts.get(o)]
+        # 1.1-4:听回话要 HAL 能录(``mic``)、还要能传回站点
+        return [o for o in OUTPUTS if acts.get(o) and (o != "mic" or self.talk is not None)]
 
     def caps(self) -> dict[str, Any] | None:
         """``capabilities.tasks.deter``:接了哪几路、喇叭能放哪些话术、能不能 TTS。
@@ -84,6 +87,7 @@ class DeterDesk:
             got = langs() if callable(langs) else None
             if got is not None:
                 d["tts_langs"] = [str(x) for x in got]
+            d["talk"] = self.talk is not None             # 1.1-4:能放按住说话录的那一段
         return d
 
     def options(self) -> dict[str, Any]:
@@ -185,7 +189,12 @@ class DeterDesk:
         """喇叭:``SPEAK_ACK_S`` 内做完(或当场出错)照常;没做完 —— 合成、连竞品主控、ssh 慢 —— 先回执
         收下,后台接着做,后台没做成发 ``ended: failed``(站点出「喊话没放出来」)。
         真机 11-20:喊话回执超过 10 s,站点等不到回 504,人以为没发出去。"""
-        t = asyncio.ensure_future(self.hal.sound(req.clip if req.on else "", req.max_s))
+        if req.on and req.clip.startswith("talk:"):
+            if self.talk is None:
+                raise HalUnsupported("这台机器人放不了站点的录音(没接狗专用口)")
+            t = asyncio.ensure_future(self._talk_play(req))   # 1.1-4:先从站点拉下来
+        else:
+            t = asyncio.ensure_future(self.hal.sound(req.clip if req.on else "", req.max_s))
         try:
             await asyncio.wait_for(asyncio.shield(t), SPEAK_ACK_S)
             return
@@ -202,6 +211,23 @@ class DeterDesk:
             self._emit("deter", {"task_id": cmd.task_id, "output": "speaker", "on": False,
                                  "ended": "failed", "reason": str(f.exception())[:200]})
         t.add_done_callback(done)
+
+    async def _talk_play(self, req: Any) -> None:
+        path = await self.talk.fetch(req.clip)
+        await self.hal.sound(f"talk:{path}", req.max_s)
+
+    async def _listen(self, cmd: Command, req: Any) -> None:
+        """1.1-4 听回话:录 ``max_s`` 秒、传回站点;成没成都记一条 ``deter`` 事件。"""
+        try:
+            data = await self.hal.record(req.max_s)
+            await self.talk.upload(req.clip, data)
+        except Exception as exc:                     # noqa: BLE001 - 录不了、传不上:告诉站点
+            log.warning("听回话没成: %s", exc)
+            self._emit("deter", {"task_id": cmd.task_id, "output": "mic", "on": False,
+                                 "ended": "failed", "reason": str(exc)[:200], "clip": req.clip})
+            return
+        self._emit("deter", {"task_id": cmd.task_id, "output": "mic", "on": False,
+                             "ended": "done", "clip": req.clip})
 
     async def _do(self, cmd: Command, req: Any) -> str:
         if req.output == "speaker" and req.on:
@@ -224,6 +250,10 @@ class DeterDesk:
                 await self.hal.ptz(req.pan, req.tilt)
             elif req.output == "light":
                 await self._light(req.side, req.on, req.max_s)
+            elif req.output == "mic":
+                if not req.on:
+                    return ""
+                self._listening = asyncio.ensure_future(self._listen(cmd, req))
             else:
                 await self._sound_now(cmd, req)
         except HalUnsupported:
@@ -242,6 +272,8 @@ class DeterDesk:
             data["side"] = req.side
         if req.color:
             data["color"] = req.color
+        if req.output == "mic" and req.on:
+            data["clip"] = req.clip
         if req.output == "speaker" and req.on:
             data |= {"clip": req.clip[:64] if not req.clip.startswith("tts:") else "tts",
                      "priority": req.priority}

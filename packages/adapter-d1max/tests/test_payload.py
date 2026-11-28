@@ -911,3 +911,21 @@ def test_V12配置样例读得进来_警笛声生成得出来(tmp_path):
                    capture_output=True)
     with wave.open(str(out)) as w:
         assert w.getnchannels() == 1 and w.getframerate() == 16000 and w.getnframes() == 32000
+
+
+def test_1_1_4_放按住说话的录音_只认代理写的文件名_没配麦克风不报mic(tmp_path):
+    from nexwar_adapter_d1max.anbot import talk_path
+    log: list = []
+    p = Payload(PayloadConfig(audio_device="plughw:1,0", clips_dir=str(tmp_path)), run=_假跑(log))
+    wav = tmp_path / "talk" / "talk-0123456789abcdef.wav"
+    wav.parent.mkdir()
+    wav.write_bytes(b"RIFF")
+    assert p._resolve(f"talk:{wav}") == (None, str(wav))
+    for bad in (f"talk:{tmp_path}/x.wav", "talk:talk-0123456789abcdef.wav",
+                f"talk:{tmp_path}/talk/talk-ffffffffffffffff.wav"):
+        with pytest.raises(PayloadError):
+            talk_path(bad)
+    assert not p.has("mic")
+    m = Payload(PayloadConfig(audio_device="plughw:1,0", record_device="plughw:2,0"),
+                run=_假跑(log))
+    assert m.has("mic")
